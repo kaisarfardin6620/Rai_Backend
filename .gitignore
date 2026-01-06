@@ -1,0 +1,14 @@
+venv
+.venv
+__pycache__/
+*.pyc
+.env
+migrations
+staticfiles/
+sqlite3.db
+.DS_Store
+__init__.py
+logs
+profile_pictures
+postman.json
+staticfiles
