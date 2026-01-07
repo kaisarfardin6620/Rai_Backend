@@ -3,6 +3,7 @@ import os
 import dj_database_url
 import dotenv
 from datetime import timedelta
+import sys
 
 dotenv.load_dotenv()
 
@@ -14,15 +15,24 @@ LOGS_DIR = BASE_DIR / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
 SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if 'test' not in sys.argv:
+        raise ValueError("SECRET_KEY environment variable is required")
+    SECRET_KEY = 'test-secret-key-for-testing-only'
 
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
- 
+
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h]
+if not ALLOWED_HOSTS and not DEBUG:
+    raise ValueError("ALLOWED_HOSTS must be set when DEBUG=False")
 
 Server_Base_Url = os.getenv('Server_Base_Url')
 
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "")
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS.split(",") if origin]
+
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "")
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in CSRF_TRUSTED_ORIGINS.split(",") if origin]
 
 OPENAI_API_KEY = os.getenv('OpenAI_Api_Key')
 
@@ -30,7 +40,7 @@ INFOBIP_BASE_URL = os.getenv('INFOBIP_BASE_URL')
 INFOBIP_API_KEY = os.getenv('INFOBIP_API_KEY')
 INFOBIP_SENDER_ID = os.getenv('INFOBIP_SENDER_ID')
 INFOBIP_SENDER_EMAIL = os.getenv('INFOBIP_SENDER_EMAIL')
-DEFAULT_FROM_EMAIL = os.getenv('INFOBIP_SENDER_EMAIL')
+DEFAULT_FROM_EMAIL = os.getenv('INFOBIP_SENDER_EMAIL', 'noreply@example.com')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -60,8 +70,8 @@ INSTALLED_APPS = [
 EMAIL_BACKEND = "anymail.backends.infobip.EmailBackend"
 
 ANYMAIL = {
-    "INFOBIP_API_KEY": os.getenv('INFOBIP_API_KEY'),
-    "INFOBIP_BASE_URL": os.getenv('INFOBIP_BASE_URL'),
+    "INFOBIP_API_KEY": INFOBIP_API_KEY,
+    "INFOBIP_BASE_URL": INFOBIP_BASE_URL,
 }
 
 MIDDLEWARE = [
@@ -114,10 +124,18 @@ CHANNEL_LAYERS = {
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        "LOCATION": os.getenv('REDIS_CACHE_URL', os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1')),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+            "CONNECTION_POOL_KWARGS": {
+                "max_connections": 50,
+                "retry_on_timeout": True,
+            },
+            "SOCKET_CONNECT_TIMEOUT": 5,
+            "SOCKET_TIMEOUT": 5,
+        },
+        "KEY_PREFIX": "rai",
+        "TIMEOUT": 300,
     }
 }
 
@@ -129,6 +147,11 @@ CELERY_RESULT_EXTENDED = True
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 300
 CELERY_TASK_SOFT_TIME_LIMIT = 240
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
+CELERY_WORKER_PREFETCH_MULTIPLIER = 4
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_RESULT_EXPIRES = 3600
 
 DATABASE_URL = os.getenv("DATABASE_BASE_URL")
 
@@ -137,9 +160,12 @@ if DATABASE_URL:
         'default': dj_database_url.parse(DATABASE_URL)
     }
     DATABASES['default']['CONN_MAX_AGE'] = 600
+    DATABASES['default']['CONN_HEALTH_CHECKS'] = True
     DATABASES['default']['OPTIONS'] = {
         'connect_timeout': 10,
     }
+    if 'postgres' in DATABASE_URL or 'postgresql' in DATABASE_URL:
+        DATABASES['default']['OPTIONS']['options'] = '-c statement_timeout=30000'
 else:
     DATABASES = {
         'default': {
@@ -154,6 +180,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 8,
+        }
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -168,9 +197,28 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    
+    CSRF_COOKIE_SECURE = True
+    CSRF_COOKIE_HTTPONLY = True
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
@@ -190,6 +238,9 @@ REST_FRAMEWORK = {
         'anon': '5/minute',
         'user': '100/hour',
     },
+    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
 }
 
 if DEBUG:
@@ -214,14 +265,25 @@ LOGGING = {
             "formatter": "verbose",
         },
         "file": {
-            "class": "logging.FileHandler",
+            "class": "logging.handlers.RotatingFileHandler",
             "filename": LOGS_DIR / "django.log",
             "formatter": "verbose",
+            "maxBytes": 10485760,
+            "backupCount": 5,
         },
         "celery_file": {
-            "class": "logging.FileHandler",
+            "class": "logging.handlers.RotatingFileHandler",
             "filename": LOGS_DIR / "celery.log",
             "formatter": "verbose",
+            "maxBytes": 10485760,
+            "backupCount": 5,
+        },
+        "security_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOGS_DIR / "security.log",
+            "formatter": "verbose",
+            "maxBytes": 10485760,
+            "backupCount": 10,
         },
     },
     "loggers": {
@@ -230,7 +292,17 @@ LOGGING = {
             "level": "INFO",
             "propagate": True,
         },
+        "django.security": {
+            "handlers": ["security_file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
         "ai": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "authentication": {
             "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,
@@ -244,8 +316,8 @@ LOGGING = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=3000),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=70),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
@@ -266,6 +338,6 @@ SIMPLE_JWT = {
     'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
     'JTI_CLAIM': 'jti',
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
-    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
+    'SLIDING_TOKEN_LIFETIME': timedelta(hours=1),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }

@@ -3,12 +3,20 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.cache import cache
-from openai import OpenAI
+from openai import OpenAI, APIError, RateLimitError, APIConnectionError, Timeout
 from .models import Conversation, Message
 from tiktoken import encoding_for_model
 import logging
+import time
 
 logger = logging.getLogger(__name__)
+
+_encoding_cache = {}
+
+def get_cached_encoding(model_name):
+    if model_name not in _encoding_cache:
+        _encoding_cache[model_name] = encoding_for_model(model_name)
+    return _encoding_cache[model_name]
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=False):
@@ -19,7 +27,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
     MAX_CONTEXT_TOKENS = 8000
     
     try:
-        conversation = Conversation.objects.select_related('user').get(id=conversation_id)
+        conversation = Conversation.objects.select_related('user').get(id=conversation_id, is_active=True)
         
         if is_new_chat:
             try:
@@ -29,21 +37,28 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
                         {"role": "system", "content": "Generate a 3-5 word title without quotes."},
                         {"role": "user", "content": f"Title for: {user_text[:200]}"}
                     ],
-                    max_tokens=15
+                    max_tokens=15,
+                    timeout=15.0
                 )
-                smart_title = title_response.choices[0].message.content.strip().replace('"', '')
+                smart_title = title_response.choices[0].message.content.strip().replace('"', '').replace("'", "")
                 
                 conversation.title = smart_title
                 conversation.save(update_fields=['title', 'updated_at'])
                 
                 async_to_sync(channel_layer.group_send)(
                     group_name,
-                    {"type": "chat_title_update", "title": smart_title, "conversation_id": conversation_id}
+                    {"type": "chat_title_update", "title": smart_title, "conversation_id": str(conversation_id)}
                 )
+                
+                cache_key = f"conversations_{conversation.user_id}"
+                cache.delete(cache_key)
+                
+            except (RateLimitError, APIConnectionError, Timeout) as e:
+                logger.warning(f"OpenAI API error generating title for conversation {conversation_id}: {e}")
             except Exception as e:
                 logger.error(f"Failed to generate title for conversation {conversation_id}: {e}")
         
-        encoding = encoding_for_model("gpt-4o")
+        encoding = get_cached_encoding("gpt-4o")
         system_prompt = "You are Rai, a helpful AI assistant."
         
         chat_history = [{"role": "system", "content": system_prompt}]
@@ -56,7 +71,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             conversation_id=conversation_id
         ).exclude(
             text=user_text, sender='user'
-        ).order_by('-created_at')
+        ).order_by('-created_at')[:50]
         
         messages_to_include = []
         for msg in recent_messages:
@@ -83,6 +98,11 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
         Message.objects.create(conversation=conversation, sender='ai', text=ai_text)
         conversation.save(update_fields=['updated_at'])
         
+        cache_key_msg = f"messages_{conversation_id}_{conversation.user_id}"
+        cache.delete(cache_key_msg)
+        cache_key_conv = f"conversations_{conversation.user_id}"
+        cache.delete(cache_key_conv)
+        
         async_to_sync(channel_layer.group_send)(
             group_name,
             {"type": "chat_message", "message": ai_text, "sender": "ai"}
@@ -90,9 +110,44 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
         
         logger.info(f"Generated AI response for conversation {conversation_id}, tokens used: {token_count}")
         
+    except RateLimitError as e:
+        logger.error(f"OpenAI rate limit for conversation {conversation_id}: {e}")
+        try:
+            countdown = min(2 ** self.request.retries * 60, 300)
+            self.retry(exc=e, countdown=countdown)
+        except self.MaxRetriesExceededError:
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {"type": "chat_error", "message": "Service is currently busy. Please try again in a few minutes."}
+            )
+    
+    except (APIConnectionError, Timeout) as e:
+        logger.error(f"OpenAI connection error for conversation {conversation_id}: {e}")
+        try:
+            countdown = 30 * (self.request.retries + 1)
+            self.retry(exc=e, countdown=countdown)
+        except self.MaxRetriesExceededError:
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {"type": "chat_error", "message": "Unable to connect to AI service. Please try again later."}
+            )
+    
+    except APIError as e:
+        logger.error(f"OpenAI API error for conversation {conversation_id}: {e}")
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {"type": "chat_error", "message": "AI service error. Please try again."}
+        )
+    
+    except Conversation.DoesNotExist:
+        logger.error(f"Conversation {conversation_id} not found or inactive")
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {"type": "chat_error", "message": "Conversation not found."}
+        )
+    
     except Exception as e:
-        logger.error(f"Error generating AI response for conversation {conversation_id}: {e}", exc_info=True)
-        
+        logger.error(f"Unexpected error generating AI response for conversation {conversation_id}: {e}", exc_info=True)
         try:
             self.retry(exc=e)
         except self.MaxRetriesExceededError:
