@@ -17,4 +17,8 @@ uvicorn[standard]
 channels==4.2
 channels_redis==4.2
 httpx==0.28.1
-django-anymail[infobip]
+django-anymail[infobip]==9.4.0
+daphne
+celery
+django_celery_results
+gunicorn 

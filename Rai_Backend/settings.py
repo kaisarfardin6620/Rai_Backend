@@ -24,7 +24,7 @@ Server_Base_Url = os.getenv('Server_Base_Url')
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "")
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS.split(",") if origin]
 
-OpenAI_Api_Key = os.getenv('OpenAI_Api_Key')
+OPENAI_API_KEY = os.getenv('OpenAI_Api_Key')
 
 INFOBIP_BASE_URL = os.getenv('INFOBIP_BASE_URL')
 INFOBIP_API_KEY = os.getenv('INFOBIP_API_KEY')
@@ -50,7 +50,9 @@ INSTALLED_APPS = [
     'authentication',
     'dashboard',
     'subscription',
+    'ai',
     'anymail',
+    'django_celery_results',
 ]
 
 EMAIL_BACKEND = "anymail.backends.infobip.EmailBackend"
@@ -88,12 +90,27 @@ TEMPLATES = [
     },
 ]
 
+ASGI_APPLICATION = 'Rai_Backend.asgi.application'
 WSGI_APPLICATION = 'Rai_Backend.wsgi.application'
 
 AUTHENTICATION_BACKENDS = [
     "authentication.auth_backend.MultiFieldAuthBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')],
+        },
+    },
+}
+
+CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_BACKEND = 'django-db'
 
 DATABASE_URL = os.getenv("DATABASE_BASE_URL")
 
