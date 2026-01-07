@@ -15,7 +15,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-DEBUG = os.getenv('DEBUG') == 'True'
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
  
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h]
 
@@ -30,6 +30,7 @@ INFOBIP_BASE_URL = os.getenv('INFOBIP_BASE_URL')
 INFOBIP_API_KEY = os.getenv('INFOBIP_API_KEY')
 INFOBIP_SENDER_ID = os.getenv('INFOBIP_SENDER_ID')
 INFOBIP_SENDER_EMAIL = os.getenv('INFOBIP_SENDER_EMAIL')
+DEFAULT_FROM_EMAIL = os.getenv('INFOBIP_SENDER_EMAIL')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -49,7 +50,15 @@ INSTALLED_APPS = [
     'authentication',
     'dashboard',
     'subscription',
+    'anymail',
 ]
+
+EMAIL_BACKEND = "anymail.backends.infobip.EmailBackend"
+
+ANYMAIL = {
+    "INFOBIP_API_KEY": os.getenv('INFOBIP_API_KEY'),
+    "INFOBIP_BASE_URL": os.getenv('INFOBIP_BASE_URL'),
+}
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

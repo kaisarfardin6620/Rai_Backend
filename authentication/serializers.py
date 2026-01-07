@@ -3,6 +3,7 @@ from rest_framework import serializers
 from .models import User, OTP
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from Rai_Backend import settings
 
 class PasswordValidator:
     @staticmethod
@@ -54,6 +55,17 @@ class SignupFinalizeSerializer(serializers.ModelSerializer):
             'date_of_birth', 'profile_picture'
         ]
 
+    def validate(self, attrs):
+        identifier = attrs.get('identifier')
+        if '@' in identifier:
+            if User.objects.filter(email=identifier).exists():
+                raise serializers.ValidationError({"identifier": "This email is already registered."})
+        else:
+            if User.objects.filter(phone=identifier).exists():
+                raise serializers.ValidationError({"identifier": "This phone number is already registered."})
+        
+        return attrs
+
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError("Username is already taken.")
@@ -86,9 +98,15 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 class ProfileSerializer(serializers.ModelSerializer):
+    profile_picture = serializers.SerializerMethodField()
     class Meta:
         model = User
         fields = ['username', 'email', 'phone', 'profile_picture', 'date_of_birth', 'bio', 'first_name', 'last_name']
+
+    def get_profile_picture(self, obj):
+        if obj.profile_picture:
+            return f"{settings.Server_Base_Url}{obj.profile_picture.url}"
+        return None    
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     identifier = serializers.CharField(required=True)

@@ -4,7 +4,7 @@ from .models import User, OTP
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display = ("username", "email", "phone", "first_name", "last_name", "is_email_verified", "is_phone_verified", "is_staff", "is_active", "is_admin")
+    list_display = ("id", "username", "email", "phone", "first_name", "last_name", "is_email_verified", "is_phone_verified", "is_staff", "is_active", "is_admin")
     search_fields = ("username", "email", "phone")
     ordering = ("username",)
     fieldsets = UserAdmin.fieldsets + ((None, {"fields": ("phone", "bio", "profile_picture", "date_of_birth", "is_email_verified", "is_phone_verified", "is_admin")}),)
