@@ -36,6 +36,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -53,6 +54,7 @@ INSTALLED_APPS = [
     'ai',
     'anymail',
     'django_celery_results',
+    'channels',
 ]
 
 EMAIL_BACKEND = "anymail.backends.infobip.EmailBackend"
@@ -103,20 +105,40 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')],
+            "capacity": 1500,
+            "expiry": 10,
         },
     },
+}
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
 }
 
 CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_BACKEND = 'django-db'
+CELERY_RESULT_EXTENDED = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 300
+CELERY_TASK_SOFT_TIME_LIMIT = 240
 
 DATABASE_URL = os.getenv("DATABASE_BASE_URL")
 
 if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL)
+    }
+    DATABASES['default']['CONN_MAX_AGE'] = 600
+    DATABASES['default']['OPTIONS'] = {
+        'connect_timeout': 10,
     }
 else:
     DATABASES = {
@@ -166,7 +188,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '5/minute',
-        'user': '50/day',
+        'user': '100/hour',
     },
 }
 
@@ -196,6 +218,11 @@ LOGGING = {
             "filename": LOGS_DIR / "django.log",
             "formatter": "verbose",
         },
+        "celery_file": {
+            "class": "logging.FileHandler",
+            "filename": LOGS_DIR / "celery.log",
+            "formatter": "verbose",
+        },
     },
     "loggers": {
         "django": {
@@ -203,9 +230,14 @@ LOGGING = {
             "level": "INFO",
             "propagate": True,
         },
-        "myapp": {
+        "ai": {
             "handlers": ["console", "file"],
-            "level": "DEBUG",
+            "level": "INFO",
+            "propagate": False,
+        },
+        "celery": {
+            "handlers": ["console", "celery_file"],
+            "level": "INFO",
             "propagate": False,
         },
     },
@@ -237,4 +269,3 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
-

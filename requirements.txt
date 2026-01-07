@@ -22,3 +22,4 @@ daphne
 celery
 django_celery_results
 gunicorn 
+tiktoken
