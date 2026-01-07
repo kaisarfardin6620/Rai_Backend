@@ -6,7 +6,7 @@ from django.http import JsonResponse
 
 
 urlpatterns = [
-    path('secure-admin-panel/', admin.site.urls),
+    path('admin/', admin.site.urls),
     path('api/auth/', include('authentication.urls')),
     path('api/ai/', include('ai.urls')),
 ]

@@ -3,7 +3,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.cache import cache
-from openai import OpenAI, APIError, RateLimitError, APIConnectionError, Timeout
+from openai import OpenAI, APIError, RateLimitError, APIConnectionError, APITimeoutError
 from .models import Conversation, Message
 from tiktoken import encoding_for_model
 import logging
@@ -86,7 +86,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
                 cache_key = f"conversations_{conversation.user_id}"
                 cache.delete(cache_key)
                 
-            except (RateLimitError, APIConnectionError, Timeout) as e:
+            except (RateLimitError, APIConnectionError, APITimeoutError) as e:
                 logger.warning(f"OpenAI API error generating title for conversation {conversation_id}: {e}")
             except Exception as e:
                 logger.error(f"Failed to generate title for conversation {conversation_id}: {e}")
@@ -159,7 +159,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
                 {"type": "chat_error", "message": "Service is currently busy. Please try again in a few minutes."}
             )
     
-    except (APIConnectionError, Timeout) as e:
+    except (APIConnectionError, APITimeoutError) as e:
         logger.error(f"OpenAI connection error for conversation {conversation_id}: {e}")
         try:
             countdown = 30 * (self.request.retries + 1)

@@ -19,6 +19,7 @@ class Conversation(models.Model):
         indexes = [
             models.Index(fields=['user', '-updated_at']),
             models.Index(fields=['user', 'is_active']),
+            models.Index(fields=['user', 'is_active', '-updated_at']),
         ]
 
     def __str__(self):
@@ -53,6 +54,7 @@ class Message(models.Model):
             models.Index(fields=['conversation', '-created_at']),
             models.Index(fields=['conversation', 'sender', '-created_at']),
             models.Index(fields=['conversation', 'token_count']),
+            models.Index(fields=['conversation', 'sender']),
         ]
     
     def __repr__(self):

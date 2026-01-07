@@ -88,6 +88,7 @@ ANYMAIL = {
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -140,11 +141,12 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "CONNECTION_POOL_KWARGS": {
-                "max_connections": 50,
+                "max_connections": 100,
                 "retry_on_timeout": True,
             },
             "SOCKET_CONNECT_TIMEOUT": 5,
             "SOCKET_TIMEOUT": 5,
+            "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
         },
         "KEY_PREFIX": "rai",
         "TIMEOUT": 300,
@@ -161,10 +163,13 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 300
 CELERY_TASK_SOFT_TIME_LIMIT = 240
 CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
-CELERY_WORKER_PREFETCH_MULTIPLIER = 4
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_RESULT_EXPIRES = 3600
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_COMPRESSION = 'gzip'
+CELERY_RESULT_COMPRESSION = 'gzip'
+CELERY_BROKER_POOL_LIMIT = 10
 
 DATABASE_URL = os.getenv("DATABASE_BASE_URL")
 

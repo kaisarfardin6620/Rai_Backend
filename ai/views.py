@@ -9,6 +9,7 @@ from Rai_Backend.utils import api_response
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer
 import logging
+from django.views.decorators.cache import cache_page
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class ConversationThrottle(UserRateThrottle):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ConversationThrottle])
+@cache_page(60)
 def get_conversations(request):
     try:
         cache_key = f"conversations_{request.user.id}"
