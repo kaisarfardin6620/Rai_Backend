@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import Conversation, Message
-
+from django.db.models import Count
 class MessageInline(admin.TabularInline):
     model = Message
     extra = 0
@@ -24,10 +24,17 @@ class ConversationAdmin(admin.ModelAdmin):
         return obj.title[:50] + "..." if len(obj.title) > 50 else obj.title
     title_preview.short_description = "Title"
     title_preview.admin_order_field = "title"
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('user').annotate(
+            msg_count=Count('messages')
+        )
     
     def message_count(self, obj):
-        return obj.messages.count()
+        return obj.msg_count
     message_count.short_description = "Messages"
+    message_count.admin_order_field = "msg_count"
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):

@@ -1,14 +1,45 @@
 import json
 import logging
 import bleach
+import re
+import unicodedata
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.utils import timezone
+from datetime import timedelta
 from .models import Conversation, Message
 from .tasks import generate_ai_response
 
 logger = logging.getLogger(__name__)
+
+def sanitize_message(text):
+    text = ''.join(
+        char for char in text 
+        if unicodedata.category(char)[0] != 'C' or char in '\n\t'
+    )
+    
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text
+
+def validate_user_input(text):
+    dangerous_patterns = [
+        r'ignore\s+(previous|all|prior)\s+instructions',
+        r'system:\s*you\s+are',
+        r'new\s+instructions:',
+        r'<\|im_start\|>',
+        r'<\|im_end\|>',
+    ]
+    
+    text_lower = text.lower()
+    for pattern in dangerous_patterns:
+        if re.search(pattern, text_lower):
+            logger.warning(f"Potential prompt injection detected: {text[:100]}")
+            return False
+    return True
 
 class ChatConsumer(AsyncWebsocketConsumer):
     MAX_MESSAGE_LENGTH = 10000
@@ -69,7 +100,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }))
                 return
             
-            message_text = bleach.clean(message_text, tags=[], strip=True)
+            message_text = sanitize_message(message_text)
+            
+            if not validate_user_input(message_text):
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Message contains prohibited content'
+                }))
+                return
             
             rate_limit_key = f"chat_rate_limit_{self.user.id}"
             try:
@@ -87,7 +125,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 logger.error(f"Cache error for user {self.user.id}: {cache_error}")
             
             if not self.conversation_id:
-                self.conversation = await self.create_conversation(self.user, "New Chat")
+                self.conversation = await self.get_or_create_conversation(self.user, "New Chat")
                 self.conversation_id = str(self.conversation.id)
                 self.room_group_name = f"chat_{self.conversation_id}"
 
@@ -100,9 +138,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "message": "Conversation created."
                 }))
 
-            await self.save_message(self.conversation_id, message_text, 'user')
-            message_count = await self.get_message_count(self.conversation_id)
-            is_new_chat = (message_count <= 1)
+            try:
+                await self.save_message(self.conversation_id, message_text, 'user')
+                message_count = await self.get_message_count(self.conversation_id)
+                is_new_chat = (message_count <= 1)
+            except Exception as save_error:
+                logger.error(f"Failed to save message: {save_error}", exc_info=True)
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Failed to save message. Please try again.'
+                }))
+                return
             
             generate_ai_response.delay(str(self.conversation_id), message_text, self.user.id, is_new_chat)
             
@@ -153,13 +199,38 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return Conversation.objects.create(user=user, title=title)
 
     @database_sync_to_async
+    def get_or_create_conversation(self, user, title):
+        from django.db import transaction
+        with transaction.atomic():
+            recent_conv = Conversation.objects.filter(
+                user=user,
+                is_active=True,
+                created_at__gte=timezone.now() - timedelta(seconds=10)
+            ).first()
+            
+            if recent_conv and not recent_conv.messages.exists():
+                return recent_conv
+            
+            return Conversation.objects.create(user=user, title=title)
+
+    @database_sync_to_async
     def check_conversation_exists(self, conv_id, user):
         return Conversation.objects.filter(id=conv_id, user=user, is_active=True).exists()
 
     @database_sync_to_async
-    def get_chat_history(self, conv_id):
-        messages = Message.objects.filter(conversation_id=conv_id).select_related('conversation').order_by('created_at')
-        return [{"sender": msg.sender, "message": msg.text, "created_at": str(msg.created_at)} for msg in messages]
+    def get_chat_history(self, conv_id, limit=50):
+        messages = Message.objects.filter(
+            conversation_id=conv_id
+        ).select_related('conversation').order_by('-created_at')[:limit]
+        
+        return [
+            {
+                "sender": msg.sender,
+                "message": msg.text,
+                "created_at": str(msg.created_at)
+            }
+            for msg in reversed(messages)
+        ]
 
     @database_sync_to_async
     def save_message(self, conv_id, text, sender):

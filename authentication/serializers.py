@@ -6,6 +6,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from Rai_Backend import settings
 from django.core.validators import FileExtensionValidator
 from PIL import Image
+from django.utils.crypto import constant_time_compare
 
 class PasswordValidator:
     @staticmethod

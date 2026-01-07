@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.cache import cache
 from django.db import transaction
 import logging
-
+from django.utils.crypto import constant_time_compare
 from .serializers import (
     SignupInitiateSerializer, SignupVerifySerializer, SignupFinalizeSerializer, ProfileSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
@@ -105,6 +105,20 @@ def signup_verify(request):
         identifier = serializer.validated_data['identifier']
         otp_input = serializer.validated_data['otp']
 
+        client_ip = get_client_ip(request)
+        ip_rate_limit_key = f"otp_verify_{identifier}_{client_ip}"
+        ip_attempts = cache.get(ip_rate_limit_key, 0)
+        
+        if ip_attempts >= 5:
+            return api_response(
+                message="Too many attempts from your IP. Please try again later.",
+                success=False,
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                request=request
+            )
+        
+        cache.set(ip_rate_limit_key, ip_attempts + 1, 300)
+
         otp_record = OTP.objects.filter(identifier=identifier).order_by('-created_at').first()
         
         if not otp_record:
@@ -123,7 +137,7 @@ def signup_verify(request):
                 request=request
             )
         
-        if otp_record.code != otp_input:
+        if not constant_time_compare(otp_record.code, otp_input):
             otp_record.increment_attempts()
             remaining = 5 - otp_record.attempts
             return api_response(
@@ -329,7 +343,7 @@ def password_reset_confirm(request):
                 request=request
             )
         
-        if otp_record.code != otp_code:
+        if not constant_time_compare(otp_record.code, otp_code):
             otp_record.increment_attempts()
             return api_response(
                 message="Invalid OTP.",

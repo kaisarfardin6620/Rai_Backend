@@ -51,6 +51,12 @@ def get_conversations(request):
             data=serializer.data,
             request=request
         )
+    except Conversation.DoesNotExist:
+        return api_response(
+            message="No conversations found",
+            data=[],
+            request=request
+        )
     except Exception as e:
         logger.error(f"Error fetching conversations for user {request.user.id}: {e}", exc_info=True)
         return api_response(

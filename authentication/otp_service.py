@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger("authentication")
 
 def generate_otp():
-    return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+    return ''.join(secrets.choice('0123456789') for _ in range(6))
 
 def send_otp_sms(phone, otp, retries=3):
     if not settings.INFOBIP_BASE_URL or not settings.INFOBIP_API_KEY or not settings.INFOBIP_SENDER_ID:

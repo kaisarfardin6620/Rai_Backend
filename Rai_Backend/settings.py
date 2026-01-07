@@ -3,6 +3,7 @@ import os
 import dj_database_url
 import dotenv
 from datetime import timedelta
+import urllib.parse
 import sys
 
 dotenv.load_dotenv()
@@ -28,8 +29,19 @@ if not ALLOWED_HOSTS and not DEBUG:
 
 Server_Base_Url = os.getenv('Server_Base_Url')
 
+OTP_EXPIRY_MINUTES = 3
+OTP_MAX_ATTEMPTS = 5
+ACCOUNT_LOCKOUT_MINUTES = 15
+ACCOUNT_LOCKOUT_THRESHOLD = 5
+MESSAGE_MAX_LENGTH = 10000
+WEBSOCKET_RATE_LIMIT = 20 
+
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "")
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS.split(",") if origin]
+CORS_ALLOWED_ORIGINS = [
+    origin.strip() 
+    for origin in CORS_ALLOWED_ORIGINS.split(",") 
+    if origin and urllib.parse.urlparse(origin.strip()).scheme in ('http', 'https')
+]
 
 CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in CSRF_TRUSTED_ORIGINS.split(",") if origin]
@@ -140,6 +152,7 @@ CACHES = {
 }
 
 CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_BACKEND = 'django-db'

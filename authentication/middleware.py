@@ -7,17 +7,41 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from urllib.parse import parse_qs
 import logging
+from django.core.cache import cache
 
 logger = logging.getLogger("authentication")
 
 @database_sync_to_async
 def get_user(token_key):
     try:
+        cache_key = f"ws_auth_{token_key[:20]}"
+        cached_user_id = cache.get(cache_key)
+        
+        if cached_user_id:
+            try:
+                user = get_user_model().objects.get(id=cached_user_id, is_active=True)
+                return user
+            except get_user_model().DoesNotExist:
+                cache.delete(cache_key)
+        
         UntypedToken(token_key)
-        decoded_data = jwt_decode(token_key, settings.SECRET_KEY, algorithms=["HS256"])
+        decoded_data = jwt_decode(
+            token_key, 
+            settings.SECRET_KEY, 
+            algorithms=["HS256"],
+            options={"verify_exp": True}
+        )
+        
         user_id = decoded_data.get('user_id')
+        if not user_id:
+            logger.warning("No user_id in WebSocket token")
+            return AnonymousUser()
+        
         user = get_user_model().objects.get(id=user_id, is_active=True)
+        cache.set(cache_key, user_id, 300)
+        logger.info(f"WebSocket auth successful for user: {user.username}")
         return user
+        
     except (InvalidToken, TokenError) as e:
         logger.warning(f"Invalid WebSocket token: {e}")
         return AnonymousUser()
@@ -38,8 +62,10 @@ class JWTAuthMiddleware:
             token = query_string.get("token")
             
             if token and len(token) > 0:
+                logger.debug(f"WebSocket token received: {token[0][:20]}...")
                 scope["user"] = await get_user(token[0])
             else:
+                logger.warning("No token in WebSocket query string")
                 scope["user"] = AnonymousUser()
         except Exception as e:
             logger.error(f"Middleware error: {e}", exc_info=True)
