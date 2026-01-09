@@ -77,6 +77,8 @@ INSTALLED_APPS = [
     'anymail',
     'django_celery_results',
     'channels',
+    'community',
+    'support',
 ]
 
 EMAIL_BACKEND = "anymail.backends.infobip.EmailBackend"

@@ -9,6 +9,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('authentication.urls')),
     path('api/ai/', include('ai.urls')),
+    path('api/community/', include('community.urls')),
 ]
 
 if settings.DEBUG:
