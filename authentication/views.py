@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.cache import cache
@@ -21,14 +21,8 @@ from Rai_Backend.utils import api_response, get_client_ip
 
 logger = logging.getLogger("authentication")
 
-class OTPThrottle(AnonRateThrottle):
-    rate = '3/hour'
-
-class LoginThrottle(AnonRateThrottle):
-    rate = '10/hour'
-
 @api_view(['POST'])
-@throttle_classes([OTPThrottle])
+@throttle_classes([ScopedRateThrottle])
 def signup_initiate(request):
     try:
         serializer = SignupInitiateSerializer(data=request.data)
@@ -43,7 +37,6 @@ def signup_initiate(request):
 
         destination = serializer.validated_data['identifier']
         method = "email" if "@" in destination else "sms"
-        
         rate_limit_key = f"otp_limit_{destination}"
         if cache.get(rate_limit_key):
             return api_response(
@@ -85,9 +78,10 @@ def signup_initiate(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+signup_initiate.throttle_scope = 'otp'
 
 @api_view(['POST'])
-@throttle_classes([AnonRateThrottle])
+@throttle_classes([ScopedRateThrottle])
 def signup_verify(request):
     try:
         serializer = SignupVerifySerializer(data=request.data)
@@ -163,10 +157,11 @@ def signup_verify(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+signup_verify.throttle_scope = 'anon'
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
-@throttle_classes([AnonRateThrottle])
+@throttle_classes([ScopedRateThrottle])
 def signup_finalize(request):
     try:
         serializer = SignupFinalizeSerializer(data=request.data)
@@ -219,10 +214,12 @@ def signup_finalize(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+signup_finalize.throttle_scope = 'anon'
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
-    throttle_classes = [LoginThrottle]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
 
     def post(self, request, *args, **kwargs):
         try:
@@ -254,7 +251,7 @@ class MyTokenObtainPairView(TokenObtainPairView):
             )
 
 @api_view(['POST'])
-@throttle_classes([OTPThrottle])
+@throttle_classes([ScopedRateThrottle])
 def password_reset_request(request):
     try:
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -310,9 +307,10 @@ def password_reset_request(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+password_reset_request.throttle_scope = 'otp'
 
 @api_view(['POST'])
-@throttle_classes([AnonRateThrottle])
+@throttle_classes([ScopedRateThrottle])
 def password_reset_confirm(request):
     try:
         serializer = PasswordResetConfirmSerializer(data=request.data, context={'request': request})
@@ -378,10 +376,11 @@ def password_reset_confirm(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+password_reset_confirm.throttle_scope = 'anon'
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([UserRateThrottle])
+@throttle_classes([ScopedRateThrottle])
 def get_profile(request):
     try:
         serializer = ProfileSerializer(request.user, context={'request': request})
@@ -399,11 +398,12 @@ def get_profile(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+get_profile.throttle_scope = 'user'
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
-@throttle_classes([UserRateThrottle])
+@throttle_classes([ScopedRateThrottle])
 def update_profile(request):
     try:
         serializer = ProfileSerializer(request.user, data=request.data, partial=True, context={'request': request})
@@ -433,10 +433,11 @@ def update_profile(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+update_profile.throttle_scope = 'user'
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([UserRateThrottle])
+@throttle_classes([ScopedRateThrottle])
 def change_password(request):
     try:
         serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
@@ -465,10 +466,11 @@ def change_password(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+change_password.throttle_scope = 'user'
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([UserRateThrottle])
+@throttle_classes([ScopedRateThrottle])
 def logout_view(request):
     try:
         serializer = LogoutSerializer(data=request.data)
@@ -497,10 +499,11 @@ def logout_view(request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
         )
+logout_view.throttle_scope = 'user'
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([UserRateThrottle])
+@throttle_classes([ScopedRateThrottle])
 def delete_account(request):
     try:
         serializer = DeleteAccountSerializer(data=request.data, context={'request': request})
@@ -529,4 +532,5 @@ def delete_account(request):
             success=False,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             request=request
-        )            
+        )
+delete_account.throttle_scope = 'user'

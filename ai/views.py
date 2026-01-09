@@ -1,6 +1,6 @@
 from rest_framework.decorators import api_view, permission_classes, throttle_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.throttling import UserRateThrottle
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import status
@@ -24,15 +24,9 @@ class StandardPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 
-class ConversationThrottle(UserRateThrottle):
-    rate = '100/hour'
-
-class MediaThrottle(UserRateThrottle):
-    rate = '20/hour'
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([ConversationThrottle])
+@throttle_classes([ScopedRateThrottle])
 def get_conversations(request):
     try:
         cache_key = f"conversations_{request.user.id}"
@@ -55,10 +49,11 @@ def get_conversations(request):
     except Exception as e:
         logger.error(f"Error fetching conversations: {e}", exc_info=True)
         return api_response(message="Failed to fetch conversations", success=False, status_code=500, request=request)
+get_conversations.throttle_scope = 'conversation'
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([ConversationThrottle])
+@throttle_classes([ScopedRateThrottle])
 def get_messages(request, conversation_id):
     try:
         conversation = Conversation.objects.get(id=conversation_id, user=request.user, is_active=True)
@@ -74,10 +69,11 @@ def get_messages(request, conversation_id):
     except Exception as e:
         logger.error(f"Error fetching messages: {e}", exc_info=True)
         return api_response(message="Failed to fetch messages", success=False, status_code=500, request=request)
+get_messages.throttle_scope = 'conversation'
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([ConversationThrottle])
+@throttle_classes([ScopedRateThrottle])
 def delete_conversation(request, conversation_id):
     try:
         conversation = Conversation.objects.get(id=conversation_id, user=request.user, is_active=True)
@@ -86,10 +82,11 @@ def delete_conversation(request, conversation_id):
         return api_response(message="Deleted successfully", status_code=200, request=request)
     except Conversation.DoesNotExist:
         return api_response(message="Not found", success=False, status_code=404, request=request)
+delete_conversation.throttle_scope = 'conversation'
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([MediaThrottle])
+@throttle_classes([ScopedRateThrottle])
 @parser_classes([MultiPartParser, FormParser])
 def transcribe_audio(request):
     temp_path = None
@@ -123,10 +120,11 @@ def transcribe_audio(request):
                 os.remove(temp_path)
             except Exception as e:
                 logger.error(f"Failed to cleanup temp file {temp_path}: {e}")
+transcribe_audio.throttle_scope = 'media'
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([MediaThrottle])
+@throttle_classes([ScopedRateThrottle])
 @parser_classes([MultiPartParser, FormParser])
 def upload_chat_image(request):
     try:
@@ -153,3 +151,4 @@ def upload_chat_image(request):
     except Exception as e:
         logger.error(f"Image upload error: {e}", exc_info=True)
         return api_response(message="Upload failed", success=False, status_code=500, request=request)
+upload_chat_image.throttle_scope = 'media'

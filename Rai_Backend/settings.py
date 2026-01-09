@@ -34,7 +34,9 @@ OTP_MAX_ATTEMPTS = 5
 ACCOUNT_LOCKOUT_MINUTES = 15
 ACCOUNT_LOCKOUT_THRESHOLD = 5
 MESSAGE_MAX_LENGTH = 10000
-WEBSOCKET_RATE_LIMIT = 20 
+
+AI_CHAT_MAX_MESSAGES = 20
+AI_CHAT_WINDOW_SECONDS = 60
 
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "")
 CORS_ALLOWED_ORIGINS = [
@@ -81,12 +83,12 @@ INSTALLED_APPS = [
     'support',
 ]
 
-EMAIL_BACKEND = "anymail.backends.infobip.EmailBackend"
-
-ANYMAIL = {
-    "INFOBIP_API_KEY": INFOBIP_API_KEY,
-    "INFOBIP_BASE_URL": INFOBIP_BASE_URL,
-}
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp-api.infobip.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('SMTP_USERNAME')
+EMAIL_HOST_PASSWORD = os.getenv('SMTP_PASSWORD') 
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -242,6 +244,7 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
 
+# 2. API Rate Limits (Used in views.py)
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -252,13 +255,17 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+    # Centralized Throttling Control
     'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '5/minute',
-        'user': '100/hour',
+        'anon': '10/minute',       # General limit for unauthenticated users
+        'otp': '3/hour',           # Limit for requesting OTPs (Signup/Reset)
+        'login': '10/hour',        # Login attempts
+        'media': '20/hour',        # Uploading Images/Audio
+        'conversation': '100/hour',# Fetching chat history
+        'user': '1000/day',        # General limit for authenticated users
     },
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',

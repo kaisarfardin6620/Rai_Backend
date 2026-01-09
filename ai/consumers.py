@@ -9,6 +9,7 @@ from django.utils import timezone
 from datetime import timedelta
 from .models import Conversation, Message
 from .tasks import generate_ai_response
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,8 @@ def validate_user_input(text):
 
 class ChatConsumer(AsyncWebsocketConsumer):
     MAX_MESSAGE_LENGTH = 10000
-    RATE_LIMIT_MESSAGES = 20
-    RATE_LIMIT_WINDOW = 60
+    RATE_LIMIT_MESSAGES = settings.AI_CHAT_MAX_MESSAGES
+    RATE_LIMIT_WINDOW = settings.AI_CHAT_WINDOW_SECONDS
     
     async def connect(self):
         self.user = self.scope["user"]
