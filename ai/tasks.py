@@ -62,24 +62,36 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             )
             return
         
-        if is_new_chat and user_text:
+        should_rename = (is_new_chat or conversation.title == "New Chat") and user_text
+        
+        if should_rename:
             try:
                 title_res = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "Generate a 3-5 word title without quotes."},
-                        {"role": "user", "content": user_text[:200]}
+                        {
+                            "role": "system", 
+                            "content": "Generate a short, descriptive title (2-6 words) that captures the essence of the conversation. Be literal and specific, not creative or poetic. Examples: 'Python syntax help', 'Chocolate cake recipe', 'Trip to Paris advice', 'General assistance', 'Getting started'. Even for simple messages, create a meaningful title based on the content or intent."
+                        },
+                        {"role": "user", "content": user_text[:300]}
                     ],
-                    max_tokens=15,
+                    max_tokens=20,
+                    temperature=0.3,
                     timeout=15.0
                 )
                 title = title_res.choices[0].message.content.strip().replace('"', '').replace("'", "")
-                conversation.title = title
-                conversation.save(update_fields=['title', 'updated_at'])
-                async_to_sync(channel_layer.group_send)(
-                    group_name, {"type": "chat_title_update", "title": title}
-                )
-                cache.delete(f"conversations_{conversation.user_id}")
+                
+                if title and len(title) > 1 and len(title) <= 100:
+                    title = re.sub(r'[#*_`]', '', title)
+                    if len(title) > 60:
+                        title = title[:57] + "..."
+                    
+                    conversation.title = title
+                    conversation.save(update_fields=['title', 'updated_at'])
+                    async_to_sync(channel_layer.group_send)(
+                        group_name, {"type": "chat_title_update", "title": title}
+                    )
+                    cache.delete(f"conversations_{conversation.user_id}")
             except (RateLimitError, APIConnectionError, APITimeoutError) as e:
                 logger.warning(f"OpenAI API error generating title for conversation {conversation_id}: {e}")
             except Exception as e:
