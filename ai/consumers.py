@@ -99,6 +99,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 await self.channel_layer.group_add(self.room_group_name, self.channel_name)
                 await self.send_json({"type": "init", "conversation_id": self.conversation_id})
 
+            if image_id:
+                image_valid = await self.validate_image_ownership(image_id, self.conversation_id, self.user.id)
+                if not image_valid:
+                    await self.send_json({'type': 'error', 'message': 'Invalid image'})
+                    return
+
             try:
                 await self.save_message(self.conversation_id, message_text, 'user', image_id)
                 message_count = await self.get_message_count(self.conversation_id)
@@ -145,6 +151,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def check_conversation_exists(self, conv_id, user):
         return Conversation.objects.filter(id=conv_id, user=user, is_active=True).exists()
+
+    @database_sync_to_async
+    def validate_image_ownership(self, image_id, conv_id, user_id):
+        try:
+            msg = Message.objects.select_related('conversation').get(
+                id=image_id,
+                conversation_id=conv_id,
+                conversation__user_id=user_id,
+                image__isnull=False
+            )
+            return True
+        except Message.DoesNotExist:
+            return False
 
     @database_sync_to_async
     def get_chat_history(self, conv_id):

@@ -15,6 +15,7 @@ from .serializers import (
 from openai import OpenAI
 import logging
 import os
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -91,33 +92,37 @@ def delete_conversation(request, conversation_id):
 @throttle_classes([MediaThrottle])
 @parser_classes([MultiPartParser, FormParser])
 def transcribe_audio(request):
+    temp_path = None
     try:
         serializer = AudioTranscribeSerializer(data=request.data)
         if not serializer.is_valid():
             return api_response(message="Invalid file", data=serializer.errors, success=False, status_code=400, request=request)
 
         audio_file = serializer.validated_data['audio']
-        temp_path = f"temp_{request.user.id}_{audio_file.name}"
-        with open(temp_path, 'wb+') as destination:
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_file.name)[1]) as tmp_file:
+            temp_path = tmp_file.name
             for chunk in audio_file.chunks():
-                destination.write(chunk)
+                tmp_file.write(chunk)
 
-        try:
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            with open(temp_path, "rb") as file_stream:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1", 
-                    file=file_stream
-                )
-            
-            return api_response(message="Transcribed", data={"text": transcript.text}, request=request)
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        with open(temp_path, "rb") as file_stream:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=file_stream
+            )
+        
+        return api_response(message="Transcribed", data={"text": transcript.text}, request=request)
 
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
         return api_response(message="Transcription failed", success=False, status_code=500, request=request)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception as e:
+                logger.error(f"Failed to cleanup temp file {temp_path}: {e}")
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -130,20 +135,20 @@ def upload_chat_image(request):
             return api_response(message="Invalid image", data=serializer.errors, success=False, status_code=400, request=request)
         
         conversation_id = request.data.get('conversation_id')
-        if conversation_id:
-            try:
-                conv = Conversation.objects.get(id=conversation_id, user=request.user, is_active=True)
-                message = Message.objects.create(
-                    conversation=conv,
-                    sender='user',
-                    text='',
-                    image=serializer.validated_data['image']
-                )
-                return api_response(message="Image uploaded", data={"image_id": message.id, "url": message.image.url}, request=request)
-            except Conversation.DoesNotExist:
-                 return api_response(message="Conversation not found", success=False, status_code=404, request=request)
-        
-        return api_response(message="Conversation ID required", success=False, status_code=400, request=request)
+        if not conversation_id:
+            return api_response(message="Conversation ID required", success=False, status_code=400, request=request)
+
+        try:
+            conv = Conversation.objects.get(id=conversation_id, user=request.user, is_active=True)
+            message = Message.objects.create(
+                conversation=conv,
+                sender='user',
+                text='',
+                image=serializer.validated_data['image']
+            )
+            return api_response(message="Image uploaded", data={"image_id": message.id, "url": message.image.url}, request=request)
+        except Conversation.DoesNotExist:
+            return api_response(message="Conversation not found", success=False, status_code=404, request=request)
 
     except Exception as e:
         logger.error(f"Image upload error: {e}", exc_info=True)

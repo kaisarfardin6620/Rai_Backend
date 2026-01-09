@@ -32,7 +32,7 @@ class Message(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages", db_index=True)
     sender = models.CharField(max_length=10, choices=SENDER_CHOICES, db_index=True)
     text = models.TextField(validators=[MaxLengthValidator(50000)], blank=True)
-    image = models.ImageField(upload_to='chat_images/', null=True, blank=True)
+    image = models.ImageField(upload_to='chat_images/', null=True, blank=True, db_index=True)
     token_count = models.IntegerField(default=0, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
@@ -52,4 +52,6 @@ class Message(models.Model):
             models.Index(fields=['conversation', '-created_at']),
             models.Index(fields=['conversation', 'sender', '-created_at']),
             models.Index(fields=['conversation', 'token_count']),
+            models.Index(fields=['conversation', 'sender']),
+            models.Index(fields=['conversation', 'image']),
         ]
