@@ -7,54 +7,45 @@ from Rai_Backend import settings
 from django.core.validators import FileExtensionValidator
 from PIL import Image
 from django.utils.crypto import constant_time_compare
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 class PasswordValidator:
     @staticmethod
     def validate_password_strength(password):
-        errors = []
-
-        if len(password) < 8:
-            errors.append("at least 8 characters long")
-        if not re.search(r"[A-Z]", password):
-            errors.append("one uppercase letter")
-        if not re.search(r"[a-z]", password):
-            errors.append("one lowercase letter")
-        if not re.search(r"\d", password):
-            errors.append("one number")
-        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
-            errors.append("one special character")
-
-        if errors:
+        if (len(password) < 8 or
+            not re.search(r"[A-Z]", password) or
+            not re.search(r"[a-z]", password) or
+            not re.search(r"\d", password) or
+            not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password)):
+            
             raise serializers.ValidationError(
-                f"Password must contain {', '.join(errors)}."
+                "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character."
             )
 
 class SignupInitiateSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=False, allow_blank=True)
-    phone = serializers.CharField(required=False, allow_blank=True)
+    identifier = serializers.CharField(required=True)
 
-    def validate(self, attrs):
-        email = attrs.get('email')
-        phone = attrs.get('phone')
+    def validate_identifier(self, value):
+        value = value.strip()
         
-        if not email and not phone:
-            raise serializers.ValidationError("Provide either email or phone.")
+        if '@' in value:
+            value = value.lower()
+            try:
+                validate_email(value)
+            except DjangoValidationError:
+                raise serializers.ValidationError("Invalid email format.")
+                
+            if User.objects.filter(email=value).exists():
+                raise serializers.ValidationError("Email already registered.")
         
-        if email:
-            email = email.lower().strip()
-            attrs['email'] = email
-            if User.objects.filter(email=email).exists():
-                raise serializers.ValidationError({"email": "Email already registered."})
-        
-        if phone:
-            phone = phone.strip()
-            attrs['phone'] = phone
-            if not re.match(r'^\+?1?\d{9,15}$', phone):
-                raise serializers.ValidationError({"phone": "Invalid phone number format."})
-            if User.objects.filter(phone=phone).exists():
-                raise serializers.ValidationError({"phone": "Phone already registered."})
+        else:
+            if not re.match(r'^\+?1?\d{9,15}$', value):
+                raise serializers.ValidationError("Invalid phone number format.")
+            if User.objects.filter(phone=value).exists():
+                raise serializers.ValidationError("Phone already registered.")
             
-        return attrs
+        return value
 
 class SignupVerifySerializer(serializers.Serializer):
     identifier = serializers.CharField()

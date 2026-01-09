@@ -41,10 +41,8 @@ def signup_initiate(request):
                 request=request
             )
 
-        email = serializer.validated_data.get('email')
-        phone = serializer.validated_data.get('phone')
-        destination = email if email else phone
-        method = "email" if email else "sms"
+        destination = serializer.validated_data['identifier']
+        method = "email" if "@" in destination else "sms"
         
         rate_limit_key = f"otp_limit_{destination}"
         if cache.get(rate_limit_key):
