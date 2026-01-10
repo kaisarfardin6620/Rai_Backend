@@ -6,9 +6,19 @@ from django.core.validators import FileExtensionValidator
 User = get_user_model()
 
 class UserShortSerializer(serializers.ModelSerializer):
+    profile_picture = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'profile_picture']
+
+    def get_profile_picture(self, obj):
+        if obj.profile_picture:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.profile_picture.url)
+            return obj.profile_picture.url
+        return None
 
 class JoinRequestSerializer(serializers.ModelSerializer):
     user = UserShortSerializer(read_only=True)
@@ -23,9 +33,15 @@ class CommunityListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Community
         fields = ['id', 'name', 'icon', 'member_count', 'updated_at']
+        read_only_fields = ['icon']
 
     def get_icon(self, obj):
-        return obj.icon.url if obj.icon else None
+        if obj.icon:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.icon.url)
+            return obj.icon.url
+        return None
 
 class MembershipSerializer(serializers.ModelSerializer):
     user = UserShortSerializer(read_only=True)
@@ -53,7 +69,12 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ['invite_code', 'invite_link', 'created_at']
 
     def get_icon(self, obj):
-        return obj.icon.url if obj.icon else None
+        if obj.icon:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.icon.url)
+            return obj.icon.url
+        return None
 
     def get_member_count(self, obj):
         return obj.memberships.count()
@@ -77,7 +98,10 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
             return False
 
     def get_invite_link(self, obj):
-        return f"https://rai.app/join/{obj.invite_code}"
+        request = self.context.get('request')
+        if request:
+            return f"{request.scheme}://{request.get_host()}/join/{obj.invite_code}"
+        return f"/join/{obj.invite_code}"
 
     def get_pending_request_count(self, obj):
         user = self.context['request'].user
@@ -93,10 +117,15 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = CommunityMessage
         fields = ['id', 'community', 'sender', 'text', 'image', 'created_at']
-        read_only_fields = ['id', 'created_at', 'sender']
+        read_only_fields = ['id', 'created_at', 'sender', 'image']
 
     def get_image(self, obj):
-        return obj.image.url if obj.image else None
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
 
 class CreateCommunitySerializer(serializers.ModelSerializer):
     icon = serializers.ImageField(

@@ -6,6 +6,7 @@ from datetime import timedelta
 import urllib.parse
 import sys
 
+
 dotenv.load_dotenv()
 
 AUTH_USER_MODEL = "authentication.User"

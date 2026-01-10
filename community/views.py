@@ -6,6 +6,8 @@ from django.db.models import Count, Q
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 from .models import Community, Membership, CommunityMessage, JoinRequest
 from .serializers import (
     CommunityListSerializer, CommunityDetailSerializer, CreateCommunitySerializer,
@@ -23,9 +25,13 @@ class StandardPagination(PageNumberPagination):
     max_page_size = 100
 
 class CommunityViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsCommunityAdmin]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     pagination_class = StandardPagination
+
+    def get_permissions(self):
+        if self.action in ['update', 'partial_update', 'destroy', 'process_request', 'add_member', 'reset_invite_link']:
+            return [permissions.IsAuthenticated(), IsCommunityAdmin()]
+        return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
         return Community.objects.filter(
@@ -66,7 +72,7 @@ class CommunityViewSet(viewsets.ModelViewSet):
     def join_requests(self, request, pk=None):
         community = self.get_object()
         requests = JoinRequest.objects.filter(community=community).select_related('user').order_by('-created_at')
-        serializer = JoinRequestSerializer(requests, many=True)
+        serializer = JoinRequestSerializer(requests, many=True, context={'request': request})
         return api_response(message="Pending requests", data=serializer.data, request=request)
 
     @action(detail=True, methods=['post'], url_path='process_request')
@@ -90,7 +96,6 @@ class CommunityViewSet(viewsets.ModelViewSet):
             return api_response(message="User rejected", status_code=200, request=request)
 
         return api_response(message="Invalid action", success=False, status_code=400, request=request)
-
 
     @action(detail=False, methods=['post'], url_path='join_by_code')
     def join_by_code(self, request):
@@ -127,7 +132,7 @@ class CommunityViewSet(viewsets.ModelViewSet):
         msgs = CommunityMessage.objects.filter(community=community).select_related('sender').order_by('-created_at')
         paginator = StandardPagination()
         page = paginator.paginate_queryset(msgs, request)
-        serializer = CommunityMessageSerializer(page, many=True)
+        serializer = CommunityMessageSerializer(page, many=True, context={'request': request})
         data = list(reversed(serializer.data))
         return api_response(message="Messages fetched", data=data, request=request)
 
@@ -180,7 +185,7 @@ class CommunityViewSet(viewsets.ModelViewSet):
 
         paginator = StandardPagination()
         page = paginator.paginate_queryset(memberships, request)
-        serializer = MembershipSerializer(page, many=True)
+        serializer = MembershipSerializer(page, many=True, context={'request': request})
         return api_response(message="Members fetched", data=serializer.data, request=request)
 
     @action(detail=True, methods=['post'])
@@ -212,4 +217,30 @@ class CommunityViewSet(viewsets.ModelViewSet):
              return api_response(message="No image provided", success=False, status_code=400, request=request)
         
         msg = CommunityMessage.objects.create(community=community, sender=request.user, image=image, text="")
-        return api_response(message="Image uploaded", data={"image_url": msg.image.url}, request=request)
+        
+        image_url = request.build_absolute_uri(msg.image.url)
+        
+        profile_pic_url = None
+        if request.user.profile_picture:
+            profile_pic_url = request.build_absolute_uri(request.user.profile_picture.url)
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"community_{community.id}",
+            {
+                'type': 'chat_message',
+                'id': str(msg.id),
+                'message': msg.text,
+                'image': image_url,
+                'sender': {
+                    'id': request.user.id,
+                    'username': request.user.username,
+                    'first_name': request.user.first_name,
+                    'last_name': request.user.last_name,
+                    'profile_picture': profile_pic_url
+                },
+                'created_at': str(msg.created_at)
+            }
+        )
+        
+        return api_response(message="Image uploaded", data={"image_url": image_url, "message_id": str(msg.id)}, request=request)

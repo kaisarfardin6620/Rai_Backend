@@ -38,12 +38,7 @@ class Message(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.token_count and self.text:
-            try:
-                from tiktoken import encoding_for_model
-                encoding = encoding_for_model("gpt-4o")
-                self.token_count = len(encoding.encode(self.text))
-            except Exception:
-                self.token_count = len(self.text) // 4
+            self.token_count = len(self.text) // 4
         super().save(*args, **kwargs)
 
     class Meta:

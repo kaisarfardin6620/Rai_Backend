@@ -5,13 +5,19 @@ import unicodedata
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.core.cache import cache
-from django.utils import timezone
-from datetime import timedelta
 from .models import Conversation, Message
 from .tasks import generate_ai_response
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+DANGEROUS_PATTERNS = [
+    re.compile(r'ignore\s+(previous|all|prior)\s+instructions', re.IGNORECASE),
+    re.compile(r'system:\s*you\s+are', re.IGNORECASE),
+    re.compile(r'new\s+instructions:', re.IGNORECASE),
+    re.compile(r'<\|im_start\|>', re.IGNORECASE),
+    re.compile(r'<\|im_end\|>', re.IGNORECASE),
+]
 
 def sanitize_message(text):
     if not text: return ""
@@ -24,16 +30,8 @@ def sanitize_message(text):
 
 def validate_user_input(text):
     if not text: return True
-    dangerous_patterns = [
-        r'ignore\s+(previous|all|prior)\s+instructions',
-        r'system:\s*you\s+are',
-        r'new\s+instructions:',
-        r'<\|im_start\|>',
-        r'<\|im_end\|>',
-    ]
-    text_lower = text.lower()
-    for pattern in dangerous_patterns:
-        if re.search(pattern, text_lower):
+    for pattern in DANGEROUS_PATTERNS:
+        if pattern.search(text):
             return False
     return True
 
@@ -50,6 +48,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         route_kwargs = self.scope['url_route'].get('kwargs', {})
         self.conversation_id = route_kwargs.get('conversation_id')
+        headers = dict(self.scope['headers'])
+        host = headers.get(b'host', b'').decode('utf-8')
+        scheme = "https" if self.scope.get('scheme') in ['wss', 'https'] else "http"
+        self.base_url = f"{scheme}://{host}"
 
         if self.conversation_id:
             self.room_group_name = f"chat_{self.conversation_id}"
@@ -60,7 +62,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
             await self.accept()
-            history = await self.get_chat_history(self.conversation_id)
+            history = await self.get_chat_history(self.conversation_id, self.base_url)
             await self.send(text_data=json.dumps({"type": "history", "messages": history}))
         else:
             await self.accept()
@@ -167,12 +169,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return False
 
     @database_sync_to_async
-    def get_chat_history(self, conv_id):
+    def get_chat_history(self, conv_id, base_url):
         messages = Message.objects.filter(conversation_id=conv_id).order_by('-created_at')[:50]
         return [{
             "sender": m.sender, 
             "message": m.text, 
-            "image_url": m.image.url if m.image else None,
+            "image_url": f"{base_url}{m.image.url}" if m.image else None,
             "created_at": str(m.created_at)
         } for m in reversed(messages)]
 
