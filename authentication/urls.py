@@ -4,7 +4,7 @@ from .views import (
     MyTokenObtainPairView, get_profile, 
     update_profile, password_reset_request, 
     password_reset_confirm, change_password, 
-    logout_view, delete_account
+    logout_view, delete_account,resend_otp
 )
 
 urlpatterns = [
@@ -19,4 +19,5 @@ urlpatterns = [
     path('password-reset/confirm/', password_reset_confirm, name='password-reset-confirm'),
     path('password-change/', change_password, name='password-change'),
     path('delete-account/', delete_account, name='delete-account'),
+    path('resend-otp/', resend_otp, name='resend-otp'),
 ]

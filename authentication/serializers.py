@@ -271,3 +271,12 @@ class DeleteAccountSerializer(serializers.Serializer):
         user = self.context['request'].user
         user.is_active = False
         user.save(update_fields=['is_active'])
+
+class ResendOTPSerializer(serializers.Serializer):
+    identifier = serializers.CharField(required=True)
+
+    def validate_identifier(self, value):
+        value = value.strip()
+        if '@' in value:
+            return value.lower()
+        return value        

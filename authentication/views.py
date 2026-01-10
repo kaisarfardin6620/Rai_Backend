@@ -13,7 +13,7 @@ from .serializers import (
     SignupInitiateSerializer, SignupVerifySerializer, SignupFinalizeSerializer, ProfileSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
     PasswordChangeSerializer, LogoutSerializer, DeleteAccountSerializer,
-    MyTokenObtainPairSerializer
+    MyTokenObtainPairSerializer,ResendOTPSerializer
 )
 from .otp_service import generate_otp, send_otp
 from .models import User, OTP
@@ -543,3 +543,61 @@ def delete_account(request):
             request=request
         )
 delete_account.throttle_scope = 'user'
+
+@api_view(['POST'])
+@throttle_classes([ScopedRateThrottle])
+def resend_otp(request):
+    try:
+        serializer = ResendOTPSerializer(data=request.data)
+        if not serializer.is_valid():
+            return api_response(
+                message="Validation failed",
+                data=serializer.errors,
+                success=False,
+                status_code=status.HTTP_400_BAD_REQUEST,
+                request=request
+            )
+
+        identifier = serializer.validated_data['identifier']
+        cooldown_key = f"resend_cooldown_{identifier}"
+        if cache.get(cooldown_key):
+            return api_response(
+                message="Please wait 60 seconds before requesting a new code.",
+                success=False,
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                request=request
+            )
+
+        with transaction.atomic():
+            OTP.objects.filter(identifier=identifier).delete()
+            otp_code = generate_otp()
+            OTP.objects.create(identifier=identifier, code=otp_code)
+
+        method = "email" if "@" in identifier else "sms"
+        send_result = send_otp(identifier, otp_code, method=method)
+
+        if send_result:
+            cache.set(cooldown_key, True, 60)
+            
+            return api_response(
+                message="OTP resent successfully.",
+                status_code=status.HTTP_200_OK,
+                request=request
+            )
+        else:
+            return api_response(
+                message="Failed to send OTP. Please try again later.",
+                success=False,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                request=request
+            )
+
+    except Exception as e:
+        logger.error(f"Error in resend_otp: {e}", exc_info=True)
+        return api_response(
+            message="An error occurred.",
+            success=False,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            request=request
+        )
+resend_otp.throttle_scope = 'otp'
