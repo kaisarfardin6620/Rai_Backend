@@ -219,9 +219,6 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         user = User.objects.get(username=self.validated_data['username'])
         user.set_password(self.validated_data['new_password'])
         user.save(update_fields=['password'])
-        
-        dest = user.email if user.email else user.phone
-        OTP.objects.filter(identifier=dest).delete()
         return user
 
 class PasswordChangeSerializer(serializers.Serializer):

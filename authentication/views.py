@@ -328,8 +328,16 @@ def password_reset_confirm(request):
                 request=request
             )
         
-        dest = user.email if user.email else user.phone
-        otp_record = OTP.objects.filter(identifier=dest).order_by('-created_at').first()
+        identifiers = []
+        if user.email:
+            identifiers.append(user.email)
+        if user.phone:
+            identifiers.append(user.phone)
+        otp_record = OTP.objects.filter(identifier__in=identifiers).order_by('-created_at').first()
+        if otp_record:
+            dest = otp_record.identifier
+        else:
+            dest = None
         
         if not otp_record or not otp_record.is_valid():
             return api_response(
@@ -351,9 +359,10 @@ def password_reset_confirm(request):
         if serializer.is_valid():
             with transaction.atomic():
                 serializer.save()
-            
+                OTP.objects.filter(identifier=dest).delete()
+
             logger.info(f"Password reset successful for user: {username}")
-            
+
             return api_response(
                 message="Password reset successfully.",
                 status_code=status.HTTP_200_OK,
