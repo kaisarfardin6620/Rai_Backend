@@ -277,6 +277,16 @@ class ResendOTPSerializer(serializers.Serializer):
 
     def validate_identifier(self, value):
         value = value.strip()
+        
         if '@' in value:
-            return value.lower()
-        return value        
+            value = value.lower()
+            try:
+                validate_email(value)
+            except DjangoValidationError:
+                raise serializers.ValidationError("Invalid email format.")
+        
+        else:
+            if not re.match(r'^\+?1?\d{9,15}$', value):
+                raise serializers.ValidationError("Invalid phone number format.")
+            
+        return value      
