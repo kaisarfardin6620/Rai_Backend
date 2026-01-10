@@ -206,19 +206,28 @@ class CommunityViewSet(viewsets.ModelViewSet):
                 return api_response(message="User not found", success=False, status_code=404, request=request)
         return api_response(message="Invalid data", success=False, status_code=400, request=request)
 
-    @action(detail=True, methods=['post'], url_path='upload-image')
-    def upload_image(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='upload-media')
+    def upload_media(self, request, pk=None):
         community = get_object_or_404(Community, pk=pk)
         if not Membership.objects.filter(community=community, user=request.user).exists():
              return api_response(message="Not a member", success=False, status_code=403, request=request)
         
         image = request.FILES.get('image')
-        if not image:
-             return api_response(message="No image provided", success=False, status_code=400, request=request)
+        audio = request.FILES.get('audio')
         
-        msg = CommunityMessage.objects.create(community=community, sender=request.user, image=image, text="")
+        if not image and not audio:
+             return api_response(message="No media provided", success=False, status_code=400, request=request)
         
-        image_url = request.build_absolute_uri(msg.image.url)
+        msg = CommunityMessage.objects.create(
+            community=community, 
+            sender=request.user, 
+            image=image, 
+            audio=audio, 
+            text=""
+        )
+        
+        image_url = request.build_absolute_uri(msg.image.url) if msg.image else None
+        audio_url = request.build_absolute_uri(msg.audio.url) if msg.audio else None
         
         profile_pic_url = None
         if request.user.profile_picture:
@@ -232,6 +241,7 @@ class CommunityViewSet(viewsets.ModelViewSet):
                 'id': str(msg.id),
                 'message': msg.text,
                 'image': image_url,
+                'audio': audio_url,
                 'sender': {
                     'id': request.user.id,
                     'username': request.user.username,
@@ -243,4 +253,8 @@ class CommunityViewSet(viewsets.ModelViewSet):
             }
         )
         
-        return api_response(message="Image uploaded", data={"image_url": image_url, "message_id": str(msg.id)}, request=request)
+        return api_response(
+            message="Media uploaded", 
+            data={"image_url": image_url, "audio_url": audio_url, "message_id": str(msg.id)}, 
+            request=request
+        )

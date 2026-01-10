@@ -22,7 +22,6 @@ class Community(models.Model):
         super().save(*args, **kwargs)
 
     def rotate_invite_code(self):
-        """Generates a new code, invalidating the old one."""
         self.invite_code = get_random_string(12)
         self.save()
 
@@ -52,6 +51,7 @@ class CommunityMessage(models.Model):
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_community_messages")
     text = models.TextField(blank=True)
     image = models.ImageField(upload_to='community_images/', null=True, blank=True)
+    audio = models.FileField(upload_to='community_audio/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

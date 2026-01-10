@@ -26,7 +26,6 @@ class CommunityConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-        # Dynamically determine Base URL from headers
         headers = dict(self.scope['headers'])
         host = headers.get(b'host', b'').decode('utf-8')
         scheme = "https" if self.scope.get('scheme') in ['wss', 'https'] else "http"
@@ -61,6 +60,7 @@ class CommunityConsumer(AsyncWebsocketConsumer):
                         'id': str(saved_msg.id),
                         'message': saved_msg.text,
                         'image': None,
+                        'audio': None,
                         'sender': {
                             'id': self.user.id,
                             'username': self.user.username,
@@ -97,6 +97,7 @@ class CommunityConsumer(AsyncWebsocketConsumer):
                 "id": str(m.id),
                 "message": m.text,
                 "image": f"{base_url}{m.image.url}" if m.image else None,
+                "audio": f"{base_url}{m.audio.url}" if m.audio else None,
                 "sender": {
                     "id": m.sender.id,
                     "username": m.sender.username,

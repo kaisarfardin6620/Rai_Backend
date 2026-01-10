@@ -113,11 +113,12 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
 class CommunityMessageSerializer(serializers.ModelSerializer):
     sender = UserShortSerializer(read_only=True)
     image = serializers.SerializerMethodField()
+    audio = serializers.SerializerMethodField()
 
     class Meta:
         model = CommunityMessage
-        fields = ['id', 'community', 'sender', 'text', 'image', 'created_at']
-        read_only_fields = ['id', 'created_at', 'sender', 'image']
+        fields = ['id', 'community', 'sender', 'text', 'image', 'audio', 'created_at']
+        read_only_fields = ['id', 'created_at', 'sender', 'image', 'audio']
 
     def get_image(self, obj):
         if obj.image:
@@ -125,6 +126,14 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
             if request:
                 return request.build_absolute_uri(obj.image.url)
             return obj.image.url
+        return None
+
+    def get_audio(self, obj):
+        if obj.audio:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.audio.url)
+            return obj.audio.url
         return None
 
 class CreateCommunitySerializer(serializers.ModelSerializer):
