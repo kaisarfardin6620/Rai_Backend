@@ -290,3 +290,26 @@ class ResendOTPSerializer(serializers.Serializer):
                 raise serializers.ValidationError("Invalid phone number format.")
             
         return value      
+
+class EmailChangeInitiateSerializer(serializers.Serializer):
+    new_email = serializers.EmailField(required=True)
+
+    def validate_new_email(self, value):
+        value = value.lower().strip()
+        user = self.context['request'].user
+        
+        if value == user.email:
+            raise serializers.ValidationError("New email cannot be the same as the current email.")
+            
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("This email is already in use by another account.")
+            
+        return value
+
+class EmailChangeVerifySerializer(serializers.Serializer):
+    otp = serializers.CharField(min_length=6, max_length=6, required=True)
+    
+    def validate_otp(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError("OTP must contain only digits.")
+        return value

@@ -84,4 +84,4 @@ class AppPageSerializer(serializers.ModelSerializer):
     class Meta:
         model = AppPage
         fields = ['slug', 'title', 'content', 'updated_at']
-        read_only_fields = ['slug', 'updated_at']
+        read_only_fields = ['updated_at']

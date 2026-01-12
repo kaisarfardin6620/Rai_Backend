@@ -105,11 +105,15 @@ class AdminSupportViewSet(viewsets.ModelViewSet):
             
         return super().partial_update(request, *args, **kwargs)
 
-class AdminPageSettingsViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAdminUser]
-    serializer_class = AppPageSerializer
+class AdminPageSettingsViewSet(viewsets.ModelViewSet):
     queryset = AppPage.objects.all()
+    serializer_class = AppPageSerializer
     lookup_field = 'slug'
+
+    def get_permissions(self):
+        if self.action in ['retrieve', 'list']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
 
     @action(detail=True, methods=['post', 'patch'])
     def update_content(self, request, slug=None):

@@ -245,7 +245,6 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
 
-# 2. API Rate Limits (Used in views.py)
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -256,17 +255,16 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
-    # Centralized Throttling Control
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '10/minute',       # General limit for unauthenticated users
-        'otp': '3/hour',           # Limit for requesting OTPs (Signup/Reset)
-        'login': '10/hour',        # Login attempts
-        'media': '20/hour',        # Uploading Images/Audio
-        'conversation': '100/hour',# Fetching chat history
-        'user': '1000/day',        # General limit for authenticated users
+        'anon': '1000/minute',
+        'otp': '300/hour',
+        'login': '1000/hour',
+        'media': '2000/hour',
+        'conversation': '100/hour',
+        'user': '1000/day',
     },
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',

@@ -4,7 +4,10 @@ from .views import (
     MyTokenObtainPairView, get_profile, 
     update_profile, password_reset_request, 
     password_reset_confirm, change_password, 
-    logout_view, delete_account,resend_otp
+    logout_view, delete_account,resend_otp,
+    initiate_email_change, verify_email_change,
+    resend_email_change_otp
+
 )
 
 urlpatterns = [
@@ -20,4 +23,6 @@ urlpatterns = [
     path('password-change/', change_password, name='password-change'),
     path('delete-account/', delete_account, name='delete-account'),
     path('resend-otp/', resend_otp, name='resend-otp'),
-]
+    path('change-email/initiate/', initiate_email_change, name='change-email-initiate'),
+    path('change-email/verify/', verify_email_change, name='change-email-verify'),
+    path('change-email/resend/', resend_email_change_otp, name='change-email-resend'),]

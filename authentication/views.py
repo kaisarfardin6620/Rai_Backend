@@ -13,7 +13,7 @@ from .serializers import (
     SignupInitiateSerializer, SignupVerifySerializer, SignupFinalizeSerializer, ProfileSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
     PasswordChangeSerializer, LogoutSerializer, DeleteAccountSerializer,
-    MyTokenObtainPairSerializer,ResendOTPSerializer
+    MyTokenObtainPairSerializer,ResendOTPSerializer,EmailChangeInitiateSerializer, EmailChangeVerifySerializer
 )
 from .otp_service import generate_otp, send_otp
 from .models import User, OTP
@@ -601,3 +601,151 @@ def resend_otp(request):
             request=request
         )
 resend_otp.throttle_scope = 'otp'
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def initiate_email_change(request):
+    """
+    Step 1: Validate new email, generate OTP, send to NEW email, cache the request.
+    """
+    try:
+        serializer = EmailChangeInitiateSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return api_response(message="Validation failed", data=serializer.errors, success=False, status_code=400, request=request)
+
+        new_email = serializer.validated_data['new_email']
+        
+        # Rate limit check specifically for email change
+        rate_limit_key = f"email_change_limit_{request.user.id}"
+        if cache.get(rate_limit_key):
+             return api_response(message="Please wait before requesting another code.", success=False, status_code=429, request=request)
+
+        # Generate OTP
+        otp_code = generate_otp()
+        
+        # Store in Redis: Key includes UserID, Value is {email, code}
+        # Expires in 10 minutes (600 seconds)
+        cache_key = f"pending_email_change_{request.user.id}"
+        cache.set(cache_key, {"email": new_email, "otp": otp_code}, 600)
+        
+        # Send OTP to the NEW email address
+        send_result = send_otp(new_email, otp_code, method="email")
+        
+        if send_result:
+            cache.set(rate_limit_key, True, 60) # 60 second cooldown
+            return api_response(
+                message=f"OTP sent to {new_email}. Please verify to complete the change.",
+                status_code=200,
+                request=request
+            )
+        else:
+            return api_response(message="Failed to send OTP. Try again.", success=False, status_code=500, request=request)
+
+    except Exception as e:
+        logger.error(f"Error in initiate_email_change: {e}", exc_info=True)
+        return api_response(message="An error occurred.", success=False, status_code=500, request=request)
+
+initiate_email_change.throttle_scope = 'otp'
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def verify_email_change(request):
+    """
+    Step 2: Check OTP. If valid, update the user's email in the DB.
+    """
+    try:
+        serializer = EmailChangeVerifySerializer(data=request.data)
+        if not serializer.is_valid():
+            return api_response(message="Invalid OTP format", data=serializer.errors, success=False, status_code=400, request=request)
+
+        user_otp = serializer.validated_data['otp']
+        cache_key = f"pending_email_change_{request.user.id}"
+        cached_data = cache.get(cache_key)
+
+        if not cached_data:
+            return api_response(message="OTP expired or request invalid. Please start over.", success=False, status_code=400, request=request)
+
+        # Verify OTP (Using constant_time_compare for security)
+        if not constant_time_compare(cached_data['otp'], user_otp):
+            return api_response(message="Invalid OTP.", success=False, status_code=400, request=request)
+
+        # OTP Matches! Perform the update
+        with transaction.atomic():
+            user = request.user
+            new_email = cached_data['email']
+            
+            # Double check uniqueness just in case someone took it in the last 2 minutes
+            if User.objects.filter(email=new_email).exclude(id=user.id).exists():
+                 return api_response(message="This email is already taken.", success=False, status_code=400, request=request)
+
+            user.email = new_email
+            # Optional: Reset email verification status if you require verified emails
+            # user.is_email_verified = True 
+            user.save(update_fields=['email'])
+            
+            # Clear the cache
+            cache.delete(cache_key)
+
+        logger.info(f"User {user.id} changed email to {new_email}")
+        
+        return api_response(
+            message="Email changed successfully.",
+            data={"new_email": new_email},
+            status_code=200,
+            request=request
+        )
+
+    except Exception as e:
+        logger.error(f"Error in verify_email_change: {e}", exc_info=True)
+        return api_response(message="An error occurred.", success=False, status_code=500, request=request)
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def resend_email_change_otp(request):
+    try:
+        rate_limit_key = f"email_change_resend_limit_{request.user.id}"
+        if cache.get(rate_limit_key):
+            return api_response(
+                message="Please wait 60 seconds before requesting a new code.",
+                success=False,
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                request=request
+            )
+
+        cache_key = f"pending_email_change_{request.user.id}"
+        cached_data = cache.get(cache_key)
+        
+        if not cached_data:
+            return api_response(
+                message="No pending email change request found. Please initiate again.",
+                success=False,
+                status_code=status.HTTP_400_BAD_REQUEST,
+                request=request
+            )
+
+        new_otp = generate_otp()
+        
+        cached_data['otp'] = new_otp
+        cache.set(cache_key, cached_data, 600)
+        
+        target_email = cached_data['email']
+        send_result = send_otp(target_email, new_otp, method="email")
+
+        if send_result:
+            cache.set(rate_limit_key, True, 60)
+            return api_response(
+                message=f"New OTP sent to {target_email}.",
+                status_code=200,
+                request=request
+            )
+        else:
+            return api_response(message="Failed to send OTP.", success=False, status_code=500, request=request)
+
+    except Exception as e:
+        logger.error(f"Error in resend_email_change_otp: {e}", exc_info=True)
+        return api_response(message="An error occurred.", success=False, status_code=500, request=request)
+
+resend_email_change_otp.throttle_scope = 'otp'    
