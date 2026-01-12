@@ -10,6 +10,8 @@ urlpatterns = [
     path('api/auth/', include('authentication.urls')),
     path('api/ai/', include('ai.urls')),
     path('api/community/', include('community.urls')),
+    path('api/support/', include('support.urls')),
+    path('api/dashboard/', include('dashboard.urls')),
 ]
 
 if settings.DEBUG:

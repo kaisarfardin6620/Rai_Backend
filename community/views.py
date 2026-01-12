@@ -12,7 +12,7 @@ from .models import Community, Membership, CommunityMessage, JoinRequest
 from .serializers import (
     CommunityListSerializer, CommunityDetailSerializer, CreateCommunitySerializer,
     MembershipSerializer, CommunityMessageSerializer, AddMemberSerializer,
-    JoinRequestSerializer
+    JoinRequestSerializer, ChangeMemberRoleSerializer
 )
 from Rai_Backend.utils import api_response
 from rest_framework.pagination import PageNumberPagination
@@ -29,7 +29,7 @@ class CommunityViewSet(viewsets.ModelViewSet):
     pagination_class = StandardPagination
 
     def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy', 'process_request', 'add_member', 'reset_invite_link']:
+        if self.action in ['update', 'partial_update', 'destroy', 'process_request', 'add_member', 'reset_invite_link', 'change_role']:
             return [permissions.IsAuthenticated(), IsCommunityAdmin()]
         return [permissions.IsAuthenticated()]
 
@@ -182,6 +182,8 @@ class CommunityViewSet(viewsets.ModelViewSet):
         memberships = Membership.objects.filter(community=community).select_related('user')
         if search:
             memberships = memberships.filter(Q(user__username__icontains=search) | Q(user__first_name__icontains=search))
+        
+        memberships = memberships.order_by('role', 'user__username')
 
         paginator = StandardPagination()
         page = paginator.paginate_queryset(memberships, request)
@@ -205,6 +207,31 @@ class CommunityViewSet(viewsets.ModelViewSet):
             except User.DoesNotExist:
                 return api_response(message="User not found", success=False, status_code=404, request=request)
         return api_response(message="Invalid data", success=False, status_code=400, request=request)
+
+    @action(detail=True, methods=['post'], url_path='change-role')
+    def change_role(self, request, pk=None):
+        community = self.get_object() 
+        
+        serializer = ChangeMemberRoleSerializer(data=request.data)
+        if not serializer.is_valid():
+            return api_response(message="Invalid data", data=serializer.errors, success=False, status_code=400, request=request)
+
+        target_user_id = serializer.validated_data['user_id']
+        new_role = serializer.validated_data['role']
+
+        if target_user_id == request.user.id:
+             return api_response(message="You cannot change your own role here", success=False, status_code=400, request=request)
+
+        try:
+            target_membership = Membership.objects.get(community=community, user_id=target_user_id)
+            target_membership.role = new_role
+            target_membership.save()
+            
+            action_text = "promoted to Admin" if new_role == 'admin' else "demoted to Member"
+            return api_response(message=f"User {action_text}", status_code=200, request=request)
+            
+        except Membership.DoesNotExist:
+            return api_response(message="User is not a member of this community", success=False, status_code=404, request=request)
 
     @action(detail=True, methods=['post'], url_path='upload-media')
     def upload_media(self, request, pk=None):

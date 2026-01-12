@@ -153,3 +153,7 @@ class CreateCommunitySerializer(serializers.ModelSerializer):
 
 class AddMemberSerializer(serializers.Serializer):
     username_or_email = serializers.CharField()
+
+class ChangeMemberRoleSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField(required=True)
+    role = serializers.ChoiceField(choices=['admin', 'member'], required=True)    
