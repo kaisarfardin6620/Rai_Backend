@@ -187,25 +187,59 @@ class PasswordResetRequestSerializer(serializers.Serializer):
         return value
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    identifier = serializers.CharField()
     otp = serializers.CharField(min_length=6, max_length=6)
     new_password = serializers.CharField(validators=[PasswordValidator.validate_password_strength])
     confirm_new_password = serializers.CharField()
 
-    def validate_username(self, value):
-        return value.lower().strip()
+    def validate_identifier(self, value):
+        value = value.strip()
+        if '@' in value:
+            value = value.lower()
+        return value
+
     def validate_otp(self, value):
         if not value.isdigit():
             raise serializers.ValidationError("OTP must contain only digits.")
         return value
+
     def validate(self, attrs):
+        # 1. Check passwords match
         if attrs['new_password'] != attrs['confirm_new_password']:
             raise serializers.ValidationError({"confirm_new_password": "Passwords do not match."})
+        
+        # 2. Verify OTP via Service
+        from .services import AuthService
+        identifier = attrs['identifier']
+        otp = attrs['otp']
+        
+        success, message, _ = AuthService.verify_otp(identifier, otp, self.context.get('request'))
+        if not success:
+            raise serializers.ValidationError({"otp": message})
+        
+        # 3. Verify User exists
+        try:
+            if '@' in identifier:
+                user = User.objects.get(email=identifier)
+            else:
+                user = User.objects.get(phone=identifier)
+        except User.DoesNotExist:
+             raise serializers.ValidationError({"identifier": "No user found with this identifier."})
+
+        attrs['user'] = user
         return attrs
+
     def save(self, **kwargs):
-        user = User.objects.get(username=self.validated_data['username'])
+        user = self.validated_data['user']
+        identifier = self.validated_data['identifier']
+
+        # Update Password
         user.set_password(self.validated_data['new_password'])
         user.save(update_fields=['password'])
+        
+        # Cleanup OTP
+        OTP.objects.filter(identifier=identifier).delete()
+        
         return user
 
 class PasswordChangeSerializer(serializers.Serializer):

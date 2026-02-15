@@ -2,6 +2,7 @@ import json
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from django.conf import settings
 from .models import Community, Membership, CommunityMessage
 
 logger = structlog.get_logger(__name__)
@@ -26,13 +27,8 @@ class CommunityConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-                                  
-        headers = dict(self.scope['headers'])
-        host = headers.get(b'host', b'').decode('utf-8')
-        scheme = "https" if self.scope.get('scheme') in ['wss', 'https'] else "http"
-        self.base_url = f"{scheme}://{host}"
+        self.base_url = getattr(settings, 'Server_Base_Url', '')
 
-                      
         history = await self.get_chat_history(self.community_id, self.base_url)
         await self.send(text_data=json.dumps({"type": "history", "messages": history}))
 
@@ -54,7 +50,6 @@ class CommunityConsumer(AsyncWebsocketConsumer):
             if self.user.profile_picture:
                 profile_pic = f"{self.base_url}{self.user.profile_picture.url}"
 
-                       
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {

@@ -19,8 +19,6 @@ from .services import AuthService
 
 logger = structlog.get_logger(__name__)
 
-                     
-
 @extend_schema(
     request=SignupInitiateSerializer,
     responses={200: dict, 400: dict},
@@ -29,7 +27,6 @@ logger = structlog.get_logger(__name__)
 @api_view(['POST'])
 @throttle_classes([ScopedRateThrottle])
 def signup_initiate(request):
-    """Step 1: Send OTP to Email or Phone."""
     serializer = SignupInitiateSerializer(data=request.data)
     if serializer.is_valid():
         identifier = serializer.validated_data['identifier']
@@ -48,7 +45,6 @@ signup_initiate.throttle_scope = 'otp'
 @api_view(['POST'])
 @throttle_classes([ScopedRateThrottle])
 def signup_verify(request):
-    """Step 2: Verify the OTP."""
     serializer = SignupVerifySerializer(data=request.data)
     if serializer.is_valid():
         success, message, code = AuthService.verify_otp(
@@ -71,15 +67,18 @@ signup_verify.throttle_scope = 'anon'
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 @throttle_classes([ScopedRateThrottle])
 def signup_finalize(request):
-    """Step 3: Create User Profile (requires verified OTP)."""
     serializer = SignupFinalizeSerializer(data=request.data)
     if serializer.is_valid():
         identifier = serializer.validated_data['identifier']
-        success, message, code = AuthService.register_user({'identifier': identifier})
-        if success is None:
+        # Use lambda to delay save until inside transaction in service
+        user, message, code = AuthService.register_user(
+            identifier, 
+            lambda: serializer.save()
+        )
+
+        if not user:
              return Response({"message": message}, status=code)
 
-        user = serializer.save()
         tokens = AuthService.login_user(user)
         user_data = ProfileSerializer(user, context={'request': request}).data
         
@@ -91,8 +90,6 @@ def signup_finalize(request):
         return Response(response_data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 signup_finalize.throttle_scope = 'anon'
-
-               
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
@@ -108,8 +105,6 @@ class MyTokenObtainPairView(TokenObtainPairView):
             return response
         except Exception as e:
             raise e
-
-                            
 
 @extend_schema(responses={200: ProfileSerializer}, summary="Get Profile")
 @api_view(['GET'])
@@ -132,8 +127,6 @@ def update_profile(request):
         return Response({"message": "Profile updated", "data": serializer.data})
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 update_profile.throttle_scope = 'user'
-
-                             
 
 @extend_schema(request=PasswordResetRequestSerializer, responses={200: dict}, summary="Request Password Reset")
 @api_view(['POST'])
@@ -172,8 +165,6 @@ def change_password(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 change_password.throttle_scope = 'user'
 
-                         
-
 @extend_schema(request=LogoutSerializer, responses={200: dict}, summary="Logout")
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -211,8 +202,6 @@ def resend_otp(request):
         return Response({"message": message}, status=code)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 resend_otp.throttle_scope = 'otp'
-
-                      
 
 @extend_schema(request=EmailChangeInitiateSerializer, responses={200: dict}, summary="Initiate Email Change")
 @api_view(['POST'])

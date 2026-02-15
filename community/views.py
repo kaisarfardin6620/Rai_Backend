@@ -30,7 +30,7 @@ class CommunityViewSet(viewsets.ModelViewSet):
     pagination_class = StandardPagination
 
     def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy', 'process_request', 'add_member', 'reset_invite_link', 'change_role']:
+        if self.action in ['update', 'partial_update', 'destroy', 'process_request', 'add_member', 'reset_invite_link', 'change_role', 'join_requests']:
             return [permissions.IsAuthenticated(), IsCommunityAdmin()]
         return [permissions.IsAuthenticated()]
 

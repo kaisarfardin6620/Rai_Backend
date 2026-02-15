@@ -18,11 +18,19 @@ class Community(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.invite_code:
-            self.invite_code = get_random_string(12)
+            while True:
+                code = get_random_string(12)
+                if not Community.objects.filter(invite_code=code).exists():
+                    self.invite_code = code
+                    break
         super().save(*args, **kwargs)
 
     def rotate_invite_code(self):
-        self.invite_code = get_random_string(12)
+        while True:
+            code = get_random_string(12)
+            if not Community.objects.filter(invite_code=code).exists():
+                self.invite_code = code
+                break
         self.save()
 
     def __str__(self):

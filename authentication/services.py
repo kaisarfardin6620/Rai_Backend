@@ -6,7 +6,7 @@ from django.utils.crypto import constant_time_compare
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, OTP
 from .otp_service import generate_otp, send_otp
-from authentication.utils import get_client_ip
+from Rai_Backend.utils import get_client_ip
 
 logger = structlog.get_logger(__name__)
 
@@ -74,20 +74,17 @@ class AuthService:
         return True, "OTP verified successfully.", 200
 
     @staticmethod
-    def register_user(validated_data):
-        identifier = validated_data.get('identifier')
-        
+    def register_user(identifier, create_user_fn):
         otp_record = OTP.objects.filter(identifier=identifier, is_verified=True).first()
         if not otp_record:
             return None, "OTP not verified. Please verify first.", 403
 
         try:
             with transaction.atomic():
-                pass 
-
-            OTP.objects.filter(identifier=identifier).delete()
+                user = create_user_fn()
+                OTP.objects.filter(identifier=identifier).delete()
             
-            return True, "User created", 201
+            return user, "User created", 201
         except Exception as e:
             logger.error("registration_failed", error=str(e))
             return None, "Database error during registration.", 500

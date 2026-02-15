@@ -1,7 +1,7 @@
 import structlog
 import requests
 from django.conf import settings
-from authentication.utils import send_email
+from Rai_Backend.utils import send_email, get_client_ip
 import secrets
 
 logger = structlog.get_logger(__name__)
