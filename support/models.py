@@ -12,13 +12,13 @@ class SupportTicket(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="support_tickets")
-    subject = models.CharField(max_length=255, default="General Concern") # Optional, but good for DB organization
+    subject = models.CharField(max_length=255, default="General Concern")                                         
     message = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # Optional: Field for admin to reply directly in Django Admin
+                                                                 
     admin_response = models.TextField(blank=True, null=True)
 
     class Meta:

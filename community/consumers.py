@@ -1,36 +1,38 @@
 import json
-import logging
+import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from django.core.cache import cache
 from .models import Community, Membership, CommunityMessage
-from django.conf import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 class CommunityConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.user = self.scope["user"]
+        
         if self.user.is_anonymous:
             await self.close(code=4001)
             return
 
         self.community_id = self.scope['url_route']['kwargs']['community_id']
         self.room_group_name = f"community_{self.community_id}"
+        
         is_member = await self.check_membership(self.community_id, self.user)
         if not is_member:
-            logger.warning(f"User {self.user.id} tried to join non-member community {self.community_id}")
+            logger.warning("unauthorized_community_access", user_id=self.user.id, community_id=self.community_id)
             await self.close(code=4003)
             return
 
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
+                                  
         headers = dict(self.scope['headers'])
         host = headers.get(b'host', b'').decode('utf-8')
         scheme = "https" if self.scope.get('scheme') in ['wss', 'https'] else "http"
         self.base_url = f"{scheme}://{host}"
 
+                      
         history = await self.get_chat_history(self.community_id, self.base_url)
         await self.send(text_data=json.dumps({"type": "history", "messages": history}))
 
@@ -42,35 +44,35 @@ class CommunityConsumer(AsyncWebsocketConsumer):
         try:
             data = json.loads(text_data)
             message_text = data.get('message', '').strip()
-            msg_type = data.get('type', 'chat_message') 
             
-            if msg_type == 'chat_message':
-                if not message_text: return
-                
-                saved_msg = await self.save_message(self.community_id, self.user, message_text)
-                
-                profile_pic = None
-                if self.user.profile_picture:
-                    profile_pic = f"{self.base_url}{self.user.profile_picture.url}"
+            if not message_text: 
+                return
+            
+            saved_msg = await self.save_message(self.community_id, self.user, message_text)
+            
+            profile_pic = None
+            if self.user.profile_picture:
+                profile_pic = f"{self.base_url}{self.user.profile_picture.url}"
 
-                await self.channel_layer.group_send(
-                    self.room_group_name,
-                    {
-                        'type': 'chat_message',
-                        'id': str(saved_msg.id),
-                        'message': saved_msg.text,
-                        'image': None,
-                        'audio': None,
-                        'sender': {
-                            'id': self.user.id,
-                            'username': self.user.username,
-                            'profile_picture': profile_pic
-                        },
-                        'created_at': str(saved_msg.created_at)
-                    }
-                )
+                       
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_message',
+                    'id': str(saved_msg.id),
+                    'message': saved_msg.text,
+                    'image': None,
+                    'audio': None,
+                    'sender': {
+                        'id': self.user.id,
+                        'username': self.user.username,
+                        'profile_picture': profile_pic
+                    },
+                    'created_at': str(saved_msg.created_at)
+                }
+            )
         except Exception as e:
-            logger.error(f"Community socket error: {e}")
+            logger.error("community_ws_error", error=str(e))
 
     async def chat_message(self, event):
         await self.send(text_data=json.dumps(event))
@@ -101,8 +103,6 @@ class CommunityConsumer(AsyncWebsocketConsumer):
                 "sender": {
                     "id": m.sender.id,
                     "username": m.sender.username,
-                    "first_name": m.sender.first_name,
-                    "last_name": m.sender.last_name,
                     "profile_picture": f"{base_url}{m.sender.profile_picture.url}" if m.sender.profile_picture else None
                 },
                 "created_at": str(m.created_at)

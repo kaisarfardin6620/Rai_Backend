@@ -75,7 +75,7 @@ class JoinRequestAdmin(admin.ModelAdmin):
         with transaction.atomic():
             count = 0
             for req in queryset:
-                # Create membership
+                                   
                 Membership.objects.get_or_create(
                     community=req.community,
                     user=req.user,

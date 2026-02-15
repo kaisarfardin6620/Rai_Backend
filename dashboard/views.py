@@ -27,7 +27,7 @@ class AdminUserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     serializer_class = AdminUserListSerializer
     pagination_class = DashboardPagination
-    http_method_names = ['get', 'post', 'patch', 'delete'] # Limit methods
+    http_method_names = ['get', 'post', 'patch', 'delete']                
 
     def get_queryset(self):
         queryset = User.objects.filter(is_superuser=False).order_by('-created_at')

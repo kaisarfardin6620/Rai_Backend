@@ -3,12 +3,13 @@ from rest_framework import serializers
 from .models import User, OTP
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from Rai_Backend import settings
+from django.conf import settings
 from django.core.validators import FileExtensionValidator
 from PIL import Image
 from django.utils.crypto import constant_time_compare
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
+from drf_spectacular.utils import extend_schema_field
 
 class PasswordValidator:
     @staticmethod
@@ -28,23 +29,19 @@ class SignupInitiateSerializer(serializers.Serializer):
 
     def validate_identifier(self, value):
         value = value.strip()
-        
         if '@' in value:
             value = value.lower()
             try:
                 validate_email(value)
             except DjangoValidationError:
                 raise serializers.ValidationError("Invalid email format.")
-                
             if User.objects.filter(email=value).exists():
                 raise serializers.ValidationError("Email already registered.")
-        
         else:
             if not re.match(r'^\+?1?\d{9,15}$', value):
                 raise serializers.ValidationError("Invalid phone number format.")
             if User.objects.filter(phone=value).exists():
                 raise serializers.ValidationError("Phone already registered.")
-            
         return value
 
 class SignupVerifySerializer(serializers.Serializer):
@@ -80,13 +77,11 @@ class SignupFinalizeSerializer(serializers.ModelSerializer):
         if value:
             if value.size > 5 * 1024 * 1024:
                 raise serializers.ValidationError("Image file size cannot exceed 5MB.")
-            
             try:
                 img = Image.open(value)
                 img.verify()
             except Exception:
                 raise serializers.ValidationError("Invalid image file.")
-        
         return value
 
     def validate_username(self, value):
@@ -101,7 +96,6 @@ class SignupFinalizeSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         identifier = attrs.get('identifier')
-        
         if '@' in identifier:
             identifier = identifier.lower().strip()
             if User.objects.filter(email=identifier).exists():
@@ -110,7 +104,6 @@ class SignupFinalizeSerializer(serializers.ModelSerializer):
             identifier = identifier.strip()
             if User.objects.filter(phone=identifier).exists():
                 raise serializers.ValidationError({"identifier": "This phone number is already registered."})
-        
         attrs['identifier'] = identifier
         return attrs
 
@@ -140,7 +133,6 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         username = attrs.get('username', '').lower().strip()
         attrs['username'] = username
-        
         try:
             user = User.objects.get(username=username)
             if user.is_account_locked():
@@ -169,6 +161,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = ['username', 'email', 'phone', 'profile_picture', 'date_of_birth', 'bio', 'first_name', 'last_name']
         read_only_fields = ['username', 'email', 'phone']
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_profile_picture(self, obj):
         if obj.profile_picture:
             return f"{settings.Server_Base_Url}{obj.profile_picture.url}"
@@ -178,18 +171,15 @@ class ProfileSerializer(serializers.ModelSerializer):
         if value:
             if value.size > 5 * 1024 * 1024:
                 raise serializers.ValidationError("Image file size cannot exceed 5MB.")
-            
             try:
                 img = Image.open(value)
                 img.verify()
             except Exception:
                 raise serializers.ValidationError("Invalid image file.")
-        
         return value
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     identifier = serializers.CharField(required=True)
-
     def validate_identifier(self, value):
         value = value.strip()
         if '@' in value:
@@ -204,17 +194,14 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
     def validate_username(self, value):
         return value.lower().strip()
-
     def validate_otp(self, value):
         if not value.isdigit():
             raise serializers.ValidationError("OTP must contain only digits.")
         return value
-
     def validate(self, attrs):
         if attrs['new_password'] != attrs['confirm_new_password']:
             raise serializers.ValidationError({"confirm_new_password": "Passwords do not match."})
         return attrs
-
     def save(self, **kwargs):
         user = User.objects.get(username=self.validated_data['username'])
         user.set_password(self.validated_data['new_password'])
@@ -229,14 +216,11 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate(self, attrs):
         if attrs['new_password'] != attrs['confirm_new_password']:
             raise serializers.ValidationError({"confirm_new_password": "Passwords do not match."})
-        
         user = self.context['request'].user
         if not user.check_password(attrs['old_password']):
             raise serializers.ValidationError({"old_password": "Wrong password."})
-        
         if attrs['old_password'] == attrs['new_password']:
             raise serializers.ValidationError({"new_password": "New password must be different from old password."})
-        
         return attrs
 
     def save(self, **kwargs):
@@ -247,11 +231,9 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
-    
     def validate(self, attrs):
         self.token = attrs['refresh']
         return attrs
-
     def save(self, **kwargs):
         try:
             RefreshToken(self.token).blacklist()
@@ -260,13 +242,11 @@ class LogoutSerializer(serializers.Serializer):
 
 class DeleteAccountSerializer(serializers.Serializer):
     password = serializers.CharField()
-
     def validate_password(self, value):
         user = self.context['request'].user
         if not user.check_password(value):
             raise serializers.ValidationError("Incorrect password.")
         return value
-
     def save(self, **kwargs):
         user = self.context['request'].user
         user.is_active = False
@@ -274,41 +254,32 @@ class DeleteAccountSerializer(serializers.Serializer):
 
 class ResendOTPSerializer(serializers.Serializer):
     identifier = serializers.CharField(required=True)
-
     def validate_identifier(self, value):
         value = value.strip()
-        
         if '@' in value:
             value = value.lower()
             try:
                 validate_email(value)
             except DjangoValidationError:
                 raise serializers.ValidationError("Invalid email format.")
-        
         else:
             if not re.match(r'^\+?1?\d{9,15}$', value):
                 raise serializers.ValidationError("Invalid phone number format.")
-            
-        return value      
+        return value
 
 class EmailChangeInitiateSerializer(serializers.Serializer):
     new_email = serializers.EmailField(required=True)
-
     def validate_new_email(self, value):
         value = value.lower().strip()
         user = self.context['request'].user
-        
         if value == user.email:
             raise serializers.ValidationError("New email cannot be the same as the current email.")
-            
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("This email is already in use by another account.")
-            
         return value
 
 class EmailChangeVerifySerializer(serializers.Serializer):
     otp = serializers.CharField(min_length=6, max_length=6, required=True)
-    
     def validate_otp(self, value):
         if not value.isdigit():
             raise serializers.ValidationError("OTP must contain only digits.")

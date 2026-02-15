@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Conversation, Message
 from django.core.validators import FileExtensionValidator
+from drf_spectacular.utils import extend_schema_field
 
 class MessageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
@@ -10,6 +11,7 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'text', 'image_url', 'created_at']
         read_only_fields = ['id', 'created_at']
     
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_image_url(self, obj):
         if obj.image:
             return obj.image.url

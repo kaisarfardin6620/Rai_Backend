@@ -1,0 +1,103 @@
+import structlog
+from django.core.cache import cache
+from django.db import transaction
+from django.utils import timezone
+from django.utils.crypto import constant_time_compare
+from rest_framework_simplejwt.tokens import RefreshToken
+from .models import User, OTP
+from .otp_service import generate_otp, send_otp
+from authentication.utils import get_client_ip
+
+logger = structlog.get_logger(__name__)
+
+class AuthService:
+    
+    @staticmethod
+    def initiate_otp(identifier, request=None):
+        rate_limit_key = f"otp_limit_{identifier}"
+        if cache.get(rate_limit_key):
+            return False, "Please wait before requesting another OTP.", 429
+
+        method = "email" if "@" in identifier else "sms"
+        
+        try:
+            with transaction.atomic():
+                OTP.objects.filter(identifier=identifier).delete()
+                
+                otp_code = generate_otp()
+                OTP.objects.create(
+                    identifier=identifier, 
+                    code=otp_code, 
+                    is_verified=False
+                )
+        except Exception as e:
+            logger.error("otp_generation_failed", error=str(e))
+            return False, "System error generating OTP.", 500
+
+        send_result = send_otp(identifier, otp_code, method=method)
+        
+        if send_result:
+            cache.set(rate_limit_key, True, 60)
+            return True, "OTP sent successfully.", 200
+        
+        return False, "Failed to send OTP provider error.", 500
+
+    @staticmethod
+    def verify_otp(identifier, otp_input, request=None):
+        if request:
+            client_ip = get_client_ip(request)
+            ip_key = f"otp_verify_attempt_{identifier}_{client_ip}"
+            attempts = cache.get(ip_key, 0)
+            if attempts >= 5:
+                return False, "Too many attempts. Try again in 5 minutes.", 429
+            cache.set(ip_key, attempts + 1, 300)
+
+        otp_record = OTP.objects.filter(identifier=identifier).order_by('-created_at').first()
+        
+        if not otp_record:
+            return False, "No OTP found. Please request a new one.", 400
+        
+        if not otp_record.is_valid():
+            return False, "OTP has expired or max attempts reached.", 400
+        
+        if not constant_time_compare(otp_record.code, otp_input):
+            otp_record.increment_attempts()
+            remaining = 5 - otp_record.attempts
+            return False, f"Invalid OTP. {remaining} attempts remaining.", 400
+        
+        otp_record.is_verified = True
+        otp_record.save(update_fields=['is_verified'])
+        
+        if request:
+            cache.delete(f"otp_verify_attempt_{identifier}_{get_client_ip(request)}")
+            
+        return True, "OTP verified successfully.", 200
+
+    @staticmethod
+    def register_user(validated_data):
+        identifier = validated_data.get('identifier')
+        
+        otp_record = OTP.objects.filter(identifier=identifier, is_verified=True).first()
+        if not otp_record:
+            return None, "OTP not verified. Please verify first.", 403
+
+        try:
+            with transaction.atomic():
+                pass 
+
+            OTP.objects.filter(identifier=identifier).delete()
+            
+            return True, "User created", 201
+        except Exception as e:
+            logger.error("registration_failed", error=str(e))
+            return None, "Database error during registration.", 500
+
+    @staticmethod
+    def login_user(user):
+        refresh = RefreshToken.for_user(user)
+        return {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "user_id": user.id,
+            "username": user.username
+        }

@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Community, Membership, CommunityMessage, JoinRequest
 from django.contrib.auth import get_user_model
 from django.core.validators import FileExtensionValidator
+from drf_spectacular.utils import extend_schema_field
 
 User = get_user_model()
 
@@ -12,6 +13,7 @@ class UserShortSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'profile_picture']
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_profile_picture(self, obj):
         if obj.profile_picture:
             request = self.context.get('request')
@@ -35,6 +37,7 @@ class CommunityListSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'icon', 'member_count', 'updated_at']
         read_only_fields = ['icon']
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_icon(self, obj):
         if obj.icon:
             request = self.context.get('request')
@@ -68,6 +71,7 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['invite_code', 'invite_link', 'created_at']
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_icon(self, obj):
         if obj.icon:
             request = self.context.get('request')
@@ -76,13 +80,16 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
             return obj.icon.url
         return None
 
+    @extend_schema_field(serializers.IntegerField)
     def get_member_count(self, obj):
         return obj.memberships.count()
 
+    @extend_schema_field(serializers.BooleanField)
     def get_is_member(self, obj):
         user = self.context['request'].user
         return Membership.objects.filter(community=obj, user=user).exists()
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_role(self, obj):
         user = self.context['request'].user
         try:
@@ -90,6 +97,7 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
         except Membership.DoesNotExist:
             return None
 
+    @extend_schema_field(serializers.BooleanField)
     def get_is_muted(self, obj):
         user = self.context['request'].user
         try:
@@ -97,12 +105,14 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
         except Membership.DoesNotExist:
             return False
 
+    @extend_schema_field(serializers.CharField)
     def get_invite_link(self, obj):
         request = self.context.get('request')
         if request:
             return f"{request.scheme}://{request.get_host()}/join/{obj.invite_code}"
         return f"/join/{obj.invite_code}"
 
+    @extend_schema_field(serializers.IntegerField)
     def get_pending_request_count(self, obj):
         user = self.context['request'].user
         is_admin = Membership.objects.filter(community=obj, user=user, role='admin').exists()
@@ -120,6 +130,7 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
         fields = ['id', 'community', 'sender', 'text', 'image', 'audio', 'created_at']
         read_only_fields = ['id', 'created_at', 'sender', 'image', 'audio']
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_image(self, obj):
         if obj.image:
             request = self.context.get('request')
@@ -128,6 +139,7 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
             return obj.image.url
         return None
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_audio(self, obj):
         if obj.audio:
             request = self.context.get('request')
@@ -156,4 +168,4 @@ class AddMemberSerializer(serializers.Serializer):
 
 class ChangeMemberRoleSerializer(serializers.Serializer):
     user_id = serializers.IntegerField(required=True)
-    role = serializers.ChoiceField(choices=['admin', 'member'], required=True)    
+    role = serializers.ChoiceField(choices=['admin', 'member'], required=True)

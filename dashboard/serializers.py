@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from community.models import Community
 from support.models import SupportTicket
 from .models import AppPage
+from drf_spectacular.utils import extend_schema_field
 
 User = get_user_model()
 
@@ -16,19 +17,23 @@ class AdminUserListSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'photo', 'name', 'email', 'phone', 'join_date', 'status', 'is_active']
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_photo(self, obj):
         if obj.profile_picture:
             return obj.profile_picture.url
         return None
 
+    @extend_schema_field(serializers.CharField)
     def get_name(self, obj):
         if obj.first_name or obj.last_name:
             return f"{obj.first_name} {obj.last_name}"
         return obj.username
 
+    @extend_schema_field(serializers.CharField)
     def get_join_date(self, obj):
         return obj.created_at.strftime("%d Sep %y, %I:%M %p")
 
+    @extend_schema_field(serializers.CharField)
     def get_status(self, obj):
         return "Active" if obj.is_active else "Inactive"
 
@@ -43,19 +48,23 @@ class AdminCommunityListSerializer(serializers.ModelSerializer):
         model = Community
         fields = ['id', 'photo', 'name', 'member_count', 'group_link', 'create_date', 'status']
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_photo(self, obj):
         if obj.icon:
             return obj.icon.url
         return None
 
+    @extend_schema_field(serializers.CharField)
     def get_group_link(self, obj):
         request = self.context.get('request')
         host = request.get_host() if request else "rai.app"
         return f"https://{host}/group/{obj.invite_code}"
 
+    @extend_schema_field(serializers.CharField)
     def get_create_date(self, obj):
         return obj.created_at.strftime("%d Sep %y, %I:%M %p")
 
+    @extend_schema_field(serializers.CharField)
     def get_status(self, obj):
         return "Active"
 
@@ -72,9 +81,11 @@ class AdminSupportTicketSerializer(serializers.ModelSerializer):
             'message', 'admin_response', 'status'
         ]
 
+    @extend_schema_field(serializers.CharField)
     def get_create_date(self, obj):
         return obj.created_at.strftime("%d Sep %y, %I:%M %p")
 
+    @extend_schema_field(serializers.CharField)
     def get_reply_date(self, obj):
         if obj.updated_at and obj.admin_response:
             return obj.updated_at.strftime("%d Sep %y, %I:%M %p")
