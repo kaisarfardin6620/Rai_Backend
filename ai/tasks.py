@@ -54,7 +54,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
         if is_new_chat:
             try:
                 title_res = client.chat.completions.create(
-                    model="gpt-4o",
+                    model=settings.OPENAI_MODEL,
                     messages=[
                         {"role": "system", "content": "Generate a 3-word title based on the user prompt."},
                         {"role": "user", "content": user_text[:100]}
@@ -91,7 +91,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
         messages_payload.append({"role": "user", "content": current_content})
 
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=settings.OPENAI_MODEL,
             messages=messages_payload,
             max_tokens=1000
         )
