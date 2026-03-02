@@ -24,7 +24,7 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS =[h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
 
-Server_Base_Url = os.getenv("SERVER_BASE_URL", "http://localhost:8000")
+Server_Base_Url = os.getenv("Server_Base_Url", "http://localhost:8000")
 
 if not DEBUG and not ALLOWED_HOSTS:
     raise ValueError("ALLOWED_HOSTS must be set in production!")
