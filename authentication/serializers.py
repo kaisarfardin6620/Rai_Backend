@@ -164,7 +164,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_profile_picture(self, obj):
         if obj.profile_picture:
-            return f"{settings.Server_Base_Url}{obj.profile_picture.url}"
+            return f"{settings.SERVER_BASE_URL}{obj.profile_picture.url}"
         return None
     
     def validate_profile_picture(self, value):

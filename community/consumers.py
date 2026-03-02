@@ -27,7 +27,7 @@ class CommunityConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-        self.base_url = getattr(settings, 'Server_Base_Url', '')
+        self.base_url = getattr(settings, 'SERVER_BASE_URL', '')
 
         history = await self.get_chat_history(self.community_id, self.base_url)
         await self.send(text_data=json.dumps({"type": "history", "messages": history}))

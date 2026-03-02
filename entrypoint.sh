@@ -2,7 +2,9 @@
 
 set -e
 
-if echo "$DATABASE_BASE_URL" | grep -q "postgre"; then
+DB_URL="${DATABASE_URL:-$DATABASE_BASE_URL}"
+
+if echo "$DB_URL" | grep -q "postgre"; then
     echo "Waiting for PostgreSQL..."
     
     while ! nc -z db 5432; do

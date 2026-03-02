@@ -22,7 +22,7 @@ if not SECRET_KEY:
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+ALLOWED_HOSTS =[h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
 
 Server_Base_Url = os.getenv("SERVER_BASE_URL", "http://localhost:8000")
 
@@ -33,12 +33,12 @@ RUNNING_IN_DOCKER = os.getenv("RUNNING_IN_DOCKER", "false") == "true"
 
 AUTH_USER_MODEL = "authentication.User"
 
-AUTHENTICATION_BACKENDS = [
+AUTHENTICATION_BACKENDS =[
     "authentication.auth_backend.MultiFieldAuthBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 
-INSTALLED_APPS = [
+INSTALLED_APPS =[
     "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -63,7 +63,7 @@ INSTALLED_APPS = [
     "support",
 ]
 
-MIDDLEWARE = [
+MIDDLEWARE =[
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -79,12 +79,12 @@ ROOT_URLCONF = "Rai_Backend.urls"
 WSGI_APPLICATION = "Rai_Backend.wsgi.application"
 ASGI_APPLICATION = "Rai_Backend.asgi.application"
 
-TEMPLATES = [
+TEMPLATES =[
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "APP_DIRS": True,
         "OPTIONS": {
-            "context_processors": [
+            "context_processors":[
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
@@ -93,7 +93,7 @@ TEMPLATES = [
     }
 ]
 
-DATABASE_URL = os.getenv("DATABASE_BASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("DATABASE_BASE_URL")
 
 if DATABASE_URL:
     DATABASES = {
@@ -103,14 +103,12 @@ if DATABASE_URL:
             ssl_require=not DEBUG,
         )
     }
-
     DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
     DATABASES["default"].setdefault("OPTIONS", {})
     DATABASES["default"]["OPTIONS"]["connect_timeout"] = 10
-
 else:
     if not DEBUG:
-        raise ValueError("DATABASE_BASE_URL environment variable must be set in production!")
+        raise ValueError("DATABASE_URL (or DATABASE_BASE_URL) environment variable must be set in production!")
         
     db_path = BASE_DIR / ("dbs/db.sqlite3" if RUNNING_IN_DOCKER else "db.sqlite3")
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -144,7 +142,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [REDIS_URL],
+            "hosts":[REDIS_URL],
             "expiry": int(os.getenv("CHANNEL_EXPIRY", 300)),
         },
     }
@@ -152,13 +150,11 @@ CHANNEL_LAYERS = {
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "django-db")
-
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
-
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", 300))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", 240))
 
@@ -167,7 +163,7 @@ CELERY_TASK_ROUTES = {
     "*": {"queue": "default"},
 }
 
-AUTH_PASSWORD_VALIDATORS = [
+AUTH_PASSWORD_VALIDATORS =[
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
@@ -188,21 +184,19 @@ if not DEBUG:
     SECURE_REFERRER_POLICY = "same-origin"
 
 CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "False").lower() == "true"
-
 if not CORS_ALLOW_ALL_ORIGINS:
-    CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+    CORS_ALLOWED_ORIGINS =[o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
 
-CSRF_TRUSTED_ORIGINS = [
+CSRF_TRUSTED_ORIGINS =[
     o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
-
 CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    "DEFAULT_RENDERER_CLASSES": [
+    "DEFAULT_RENDERER_CLASSES":[
         "authentication.renderers.CustomJSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
@@ -237,30 +231,18 @@ USE_AWS = os.getenv("USE_AWS", "False").lower() == "true"
 if USE_AWS:
     AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
     AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
-
     AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
-
     STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/static/"
     MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"
-
     STORAGES = {
-        "default": {
-            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
-            "OPTIONS": {"location": "media"},
-        },
-        "staticfiles": {
-            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
-            "OPTIONS": {"location": "static"},
-        },
+        "default": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage", "OPTIONS": {"location": "media"}},
+        "staticfiles": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage", "OPTIONS": {"location": "static"}},
     }
-
 else:
     STATIC_URL = "/static/"
     STATIC_ROOT = BASE_DIR / "staticfiles"
-
     MEDIA_URL = "/media/"
     MEDIA_ROOT = BASE_DIR / "media"
-
     STORAGES = {
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
@@ -303,19 +285,25 @@ LOGGING = {
         "django": {"handlers": ["console", "file"], "level": LOG_LEVEL},
         "celery": {"handlers": ["console", "file"], "level": LOG_LEVEL},
         "ai": {"handlers": ["console", "file"], "level": LOG_LEVEL},
-        "authentication": {"handlers": ["console", "file"], "level": LOG_LEVEL},
+        "authentication": {"handlers":["console", "file"], "level": LOG_LEVEL},
     },
 }
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp-api.infobip.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_HOST_USER = os.getenv("SMTP_USERNAME", "")
+EMAIL_HOST_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() == "true"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@rai.app")
 
-EMAIL_BACKEND = os.getenv(
-    "EMAIL_BACKEND",
-    "django.core.mail.backends.console.EmailBackend"
-)
+INFOBIP_BASE_URL = os.getenv("INFOBIP_BASE_URL")
+INFOBIP_API_KEY = os.getenv("INFOBIP_API_KEY")
+INFOBIP_SENDER_ID = os.getenv("INFOBIP_SENDER_ID")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Rai Backend API",
@@ -327,5 +315,4 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
