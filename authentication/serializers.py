@@ -48,6 +48,12 @@ class SignupVerifySerializer(serializers.Serializer):
     identifier = serializers.CharField()
     otp = serializers.CharField(max_length=6, min_length=6)
 
+    def validate_identifier(self, value):
+        value = value.strip()
+        if '@' in value:
+            value = value.lower()
+        return value
+
     def validate_otp(self, value):
         if not value.isdigit():
             raise serializers.ValidationError("OTP must contain only digits.")

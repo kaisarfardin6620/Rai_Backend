@@ -11,9 +11,17 @@ from Rai_Backend.utils import get_client_ip
 logger = structlog.get_logger(__name__)
 
 class AuthService:
+
+    @staticmethod
+    def normalize_identifier(identifier):
+        identifier = identifier.strip()
+        if "@" in identifier:
+            return identifier.lower()
+        return identifier
     
     @staticmethod
     def initiate_otp(identifier, request=None):
+        identifier = AuthService.normalize_identifier(identifier)
         rate_limit_key = f"otp_limit_{identifier}"
         if cache.get(rate_limit_key):
             return False, "Please wait before requesting another OTP.", 429
@@ -44,6 +52,7 @@ class AuthService:
 
     @staticmethod
     def verify_otp(identifier, otp_input, request=None):
+        identifier = AuthService.normalize_identifier(identifier)
         if request:
             client_ip = get_client_ip(request)
             ip_key = f"otp_verify_attempt_{identifier}_{client_ip}"
@@ -75,6 +84,7 @@ class AuthService:
 
     @staticmethod
     def register_user(identifier, create_user_fn):
+        identifier = AuthService.normalize_identifier(identifier)
         otp_record = OTP.objects.filter(identifier=identifier, is_verified=True).first()
         if not otp_record:
             return None, "OTP not verified. Please verify first.", 403
