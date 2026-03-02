@@ -86,7 +86,23 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
         
         current_content = [{"type": "text", "text": user_text}]
         if image_id:
-            pass 
+            try:
+                img_msg = Message.objects.get(id=image_id, conversation_id=conversation_id)
+                if img_msg.image:
+                    with img_msg.image.open('rb') as img_file:
+                        encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
+                        
+                    ext = img_msg.image.name.split('.')[-1].lower() if '.' in img_msg.image.name else 'jpeg'
+                    mime_type = f"image/{ext}" if ext in ['jpeg', 'png', 'webp', 'gif'] else "image/jpeg"
+                    
+                    current_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{encoded_string}"
+                        }
+                    })
+            except Exception as e:
+                logger.error("vision_image_fetch_failed", error=str(e), image_id=image_id)
             
         messages_payload.append({"role": "user", "content": current_content})
 

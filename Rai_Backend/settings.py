@@ -24,6 +24,8 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
 
+Server_Base_Url = os.getenv("SERVER_BASE_URL", "http://localhost:8000")
+
 if not DEBUG and not ALLOWED_HOSTS:
     raise ValueError("ALLOWED_HOSTS must be set in production!")
 
@@ -200,7 +202,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    "DEFAULT_RENDERER_CLASSES": [  # ADD THIS
+    "DEFAULT_RENDERER_CLASSES": [
         "authentication.renderers.CustomJSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
@@ -209,16 +211,16 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": "200/minute",
-        "otp": "5/minute",  # ADD THIS
+        "otp": "5/minute",
         "login": "10/minute",
-        "media": "2000/hour",  # ADD THIS
-        "conversation": "100/hour",  # ADD THIS
+        "media": "2000/hour",
+        "conversation": "100/hour",
         "user": "1000/day",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "EXCEPTION_HANDLER": "authentication.exceptions.custom_exception_handler",  # ADD THIS
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",  # ADD THIS
-    "PAGE_SIZE": 20,  # ADD THIS
+    "EXCEPTION_HANDLER": "authentication.exceptions.custom_exception_handler",
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
 }
 
 SIMPLE_JWT = {
@@ -278,7 +280,7 @@ structlog.configure(
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "formatters": {  # ADD THIS
+    "formatters": {
         "json": {
             "()": structlog.stdlib.ProcessorFormatter,
             "processor": structlog.processors.JSONRenderer(),
@@ -287,21 +289,21 @@ LOGGING = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "json",  # ADD THIS
+            "formatter": "json",
         },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": LOGS_DIR / "app.log",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 5,
-            "formatter": "json",  # ADD THIS
+            "formatter": "json",
         },
     },
     "loggers": {
         "django": {"handlers": ["console", "file"], "level": LOG_LEVEL},
         "celery": {"handlers": ["console", "file"], "level": LOG_LEVEL},
         "ai": {"handlers": ["console", "file"], "level": LOG_LEVEL},
-        "authentication": {"handlers": ["console", "file"], "level": LOG_LEVEL},  # ADD THIS
+        "authentication": {"handlers": ["console", "file"], "level": LOG_LEVEL},
     },
 }
 

@@ -204,20 +204,10 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        # 1. Check passwords match
         if attrs['new_password'] != attrs['confirm_new_password']:
             raise serializers.ValidationError({"confirm_new_password": "Passwords do not match."})
         
-        # 2. Verify OTP via Service
-        from .services import AuthService
         identifier = attrs['identifier']
-        otp = attrs['otp']
-        
-        success, message, _ = AuthService.verify_otp(identifier, otp, self.context.get('request'))
-        if not success:
-            raise serializers.ValidationError({"otp": message})
-        
-        # 3. Verify User exists
         try:
             if '@' in identifier:
                 user = User.objects.get(email=identifier)
@@ -230,14 +220,18 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         return attrs
 
     def save(self, **kwargs):
-        user = self.validated_data['user']
+        from .services import AuthService
         identifier = self.validated_data['identifier']
+        otp = self.validated_data['otp']
+        success, message, _ = AuthService.verify_otp(identifier, otp, self.context.get('request'))
+        if not success:
+            raise serializers.ValidationError({"otp": message})
+            
+        user = self.validated_data['user']
 
-        # Update Password
         user.set_password(self.validated_data['new_password'])
         user.save(update_fields=['password'])
         
-        # Cleanup OTP
         OTP.objects.filter(identifier=identifier).delete()
         
         return user

@@ -5,6 +5,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth import get_user_model
 from urllib.parse import parse_qs
 import logging
+import hashlib
 from django.core.cache import cache
 
 logger = logging.getLogger("authentication")
@@ -12,7 +13,7 @@ logger = logging.getLogger("authentication")
 @database_sync_to_async
 def get_user(token_key):
     try:
-        cache_key = f"ws_auth_{token_key[:20]}"
+        cache_key = f"ws_auth_{hashlib.sha256(token_key.encode()).hexdigest()}"
         cached_user_id = cache.get(cache_key)
         
         if cached_user_id:
