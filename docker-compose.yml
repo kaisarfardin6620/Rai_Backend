@@ -18,6 +18,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      RUNNING_IN_DOCKER: "true"
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
@@ -32,6 +35,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      RUNNING_IN_DOCKER: "true"
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - redis
       - web
@@ -43,6 +49,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      RUNNING_IN_DOCKER: "true"
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - redis
       - web
@@ -54,6 +63,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      RUNNING_IN_DOCKER: "true"
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - redis
       - web
