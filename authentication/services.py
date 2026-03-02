@@ -86,6 +86,9 @@ class AuthService:
             
             return user, "User created", 201
         except Exception as e:
+            if hasattr(e, 'detail'):
+                return None, e.detail, 400
+                
             logger.error("registration_failed", error=str(e))
             return None, "Database error during registration.", 500
 

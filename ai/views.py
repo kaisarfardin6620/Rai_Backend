@@ -94,28 +94,22 @@ def transcribe_audio(request):
         return Response(serializer.errors, status=400)
 
     audio_file = serializer.validated_data['audio']
-    temp_path = None
     
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_file.name)[1]) as tmp:
-            temp_path = tmp.name
-            for chunk in audio_file.chunks():
-                tmp.write(chunk)
-
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        with open(temp_path, "rb") as file_stream:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1", 
-                file=file_stream
-            )
+        
+        if not hasattr(audio_file, 'name') or not audio_file.name:
+            audio_file.name = 'audio.m4a'
+            
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1", 
+            file=audio_file
+        )
         return Response({"text": transcript.text})
 
     except Exception as e:
         logger.error("transcription_failed", error=str(e))
         return Response({"detail": "Transcription failed."}, status=500)
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
 
 transcribe_audio.throttle_scope = 'media'
 

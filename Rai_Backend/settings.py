@@ -107,6 +107,9 @@ if DATABASE_URL:
     DATABASES["default"]["OPTIONS"]["connect_timeout"] = 10
 
 else:
+    if not DEBUG:
+        raise ValueError("DATABASE_BASE_URL environment variable must be set in production!")
+        
     db_path = BASE_DIR / ("dbs/db.sqlite3" if RUNNING_IN_DOCKER else "db.sqlite3")
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
