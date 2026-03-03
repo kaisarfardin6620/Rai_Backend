@@ -131,8 +131,10 @@ class CommunityViewSet(viewsets.ModelViewSet):
              return Response({"detail": "Already a member"}, status=status.HTTP_400_BAD_REQUEST)
 
         if community.is_private:
-            JoinRequest.objects.get_or_create(community=community, user=request.user)
-            return Response({"message": "Join request sent"})
+            _, created = JoinRequest.objects.get_or_create(community=community, user=request.user)
+            if created:
+                return Response({"message": "Join request sent"})
+            return Response({"detail": "You already have a pending request."}, status=status.HTTP_400_BAD_REQUEST)
         else:
             Membership.objects.create(community=community, user=request.user, role='member')
             return Response({"message": "Joined successfully"})
@@ -140,13 +142,22 @@ class CommunityViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def leave(self, request, pk=None):
         community = self.get_object()
-        deleted_count, _ = Membership.objects.filter(community=community, user=request.user).delete()
-        
-        if deleted_count > 0:
+        try:
+            membership = Membership.objects.get(community=community, user=request.user)
+            is_admin = membership.role == 'admin'
+            membership.delete()
+            
             if community.memberships.count() == 0:
                 community.delete()
+            elif is_admin and not community.memberships.filter(role='admin').exists():
+                oldest_member = community.memberships.order_by('joined_at').first()
+                if oldest_member:
+                    oldest_member.role = 'admin'
+                    oldest_member.save(update_fields=['role'])
+                    
             return Response({"message": "Left community"})
-        return Response({"detail": "Not a member"}, status=status.HTTP_400_BAD_REQUEST)
+        except Membership.DoesNotExist:
+            return Response({"detail": "Not a member"}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def toggle_mute(self, request, pk=None):

@@ -73,9 +73,10 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
 
         messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
         
-        recent_msgs = Message.objects.filter(
-            conversation_id=conversation_id
-        ).exclude(id=image_id if image_id else -1).order_by('-created_at')[:10]
+        msg_query = Message.objects.filter(conversation_id=conversation_id)
+        if image_id:
+            msg_query = msg_query.exclude(id=image_id)
+        recent_msgs = msg_query.order_by('-created_at')[:10]
         
         hist_list = []
         for msg in reversed(recent_msgs):
