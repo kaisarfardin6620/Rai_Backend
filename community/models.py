@@ -11,6 +11,7 @@ class Community(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_private = models.BooleanField(default=False)
+    approval_required = models.BooleanField(default=True)
     invite_code = models.CharField(max_length=20, unique=True, blank=True, db_index=True)
 
     class Meta:

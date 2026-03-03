@@ -65,11 +65,11 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Community
         fields = [
-            'id', 'name', 'description', 'icon', 'is_private', 
-            'invite_code', 'invite_link', 'created_at', 'member_count', 
+            'id', 'name', 'description', 'icon', 'is_private', 'approval_required',
+            'invite_code', 'invite_link', 'group_link', 'created_at', 'member_count', 
             'is_member', 'role', 'is_muted', 'pending_request_count'
         ]
-        read_only_fields = ['invite_code', 'invite_link', 'created_at']
+        read_only_fields = ['invite_code', 'invite_link', 'group_link', 'created_at']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_icon(self, obj):
@@ -111,6 +111,10 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
         if request:
             return f"{request.scheme}://{request.get_host()}/join/{obj.invite_code}"
         return f"/join/{obj.invite_code}"
+
+    @extend_schema_field(serializers.CharField)
+    def get_group_link(self, obj):
+        return f"https://rai.app-group-picks-odds/{obj.invite_code}"
 
     @extend_schema_field(serializers.IntegerField)
     def get_pending_request_count(self, obj):
@@ -156,7 +160,7 @@ class CreateCommunitySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Community
-        fields = ['name', 'description', 'icon', 'is_private']
+        fields = ['name', 'description', 'icon', 'is_private', 'approval_required']
 
     def validate_icon(self, value):
         if value and value.size > 5 * 1024 * 1024:
