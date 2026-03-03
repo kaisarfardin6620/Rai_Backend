@@ -282,10 +282,14 @@ LOGGING = {
         },
     },
     "loggers": {
-        "django": {"handlers": ["console", "file"], "level": LOG_LEVEL},
-        "celery": {"handlers": ["console", "file"], "level": LOG_LEVEL},
-        "ai": {"handlers": ["console", "file"], "level": LOG_LEVEL},
-        "authentication": {"handlers":["console", "file"], "level": LOG_LEVEL},
+        "": {
+            "handlers": ["console", "file"], 
+            "level": LOG_LEVEL
+        },
+        "django": {"handlers": ["console", "file"], "level": LOG_LEVEL, "propagate": False},
+        "celery": {"handlers": ["console", "file"], "level": LOG_LEVEL, "propagate": False},
+        "ai": {"handlers": ["console", "file"], "level": LOG_LEVEL, "propagate": False},
+        "authentication": {"handlers":["console", "file"], "level": LOG_LEVEL, "propagate": False},
     },
 }
 

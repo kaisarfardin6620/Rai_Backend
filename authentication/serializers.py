@@ -81,8 +81,8 @@ class SignupFinalizeSerializer(serializers.ModelSerializer):
 
     def validate_profile_picture(self, value):
         if value:
-            if value.size > 5 * 1024 * 1024:
-                raise serializers.ValidationError("Image file size cannot exceed 5MB.")
+            if value.size > 50 * 1024 * 1024:
+                raise serializers.ValidationError("Image file size cannot exceed 50MB.")
             try:
                 img = Image.open(value)
                 img.verify()
@@ -175,8 +175,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     
     def validate_profile_picture(self, value):
         if value:
-            if value.size > 5 * 1024 * 1024:
-                raise serializers.ValidationError("Image file size cannot exceed 5MB.")
+            if value.size > 50 * 1024 * 1024:
+                raise serializers.ValidationError("Image file size cannot exceed 50MB.")
             try:
                 img = Image.open(value)
                 img.verify()

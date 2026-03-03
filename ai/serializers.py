@@ -43,6 +43,6 @@ class ImageUploadSerializer(serializers.ModelSerializer):
         fields = ['image']
 
     def validate_image(self, value):
-        if value.size > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Image file too large. Max 5MB.")
+        if value.size > 50 * 1024 * 1024:
+            raise serializers.ValidationError("Image file too large. Max 50MB.")
         return value

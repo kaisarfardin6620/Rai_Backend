@@ -163,8 +163,8 @@ class CreateCommunitySerializer(serializers.ModelSerializer):
         fields = ['name', 'description', 'icon', 'is_private', 'approval_required']
 
     def validate_icon(self, value):
-        if value and value.size > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Icon size cannot exceed 5MB.")
+        if value and value.size > 50 * 1024 * 1024:
+            raise serializers.ValidationError("Icon size cannot exceed 50MB.")
         return value
 
 class AddMemberSerializer(serializers.Serializer):
