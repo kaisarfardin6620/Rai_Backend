@@ -73,15 +73,29 @@ class JoinRequestAdmin(admin.ModelAdmin):
 
     def approve_requests(self, request, queryset):
         with transaction.atomic():
-            count = 0
+            communities = [req.community_id for req in queryset]
+            users = [req.user_id for req in queryset]
+            
+            existing_memberships = set(
+                Membership.objects.filter(
+                    community_id__in=communities, user_id__in=users
+                ).values_list('community_id', 'user_id')
+            )
+            
+            new_memberships = []
             for req in queryset:
-                                   
-                Membership.objects.get_or_create(
-                    community=req.community,
-                    user=req.user,
-                    defaults={'role': 'member'}
-                )
-                req.delete()
-                count += 1
+                if (req.community_id, req.user_id) not in existing_memberships:
+                    new_memberships.append(Membership(
+                        community=req.community,
+                        user=req.user,
+                        role='member'
+                    ))
+            
+            if new_memberships:
+                Membership.objects.bulk_create(new_memberships)
+            
+            count = queryset.count()
+            queryset.delete()
+            
         self.message_user(request, f"Approved {count} requests successfully.")
     approve_requests.short_description = "Approve selected requests"

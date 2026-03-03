@@ -1,4 +1,5 @@
 import re
+import uuid
 from rest_framework import serializers
 from .models import User, OTP
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -170,7 +171,10 @@ class ProfileSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_profile_picture(self, obj):
         if obj.profile_picture:
-            return f"{settings.SERVER_BASE_URL}{obj.profile_picture.url}"
+            url = obj.profile_picture.url
+            if url.startswith('http'):
+                return url
+            return f"{settings.SERVER_BASE_URL}{url}"
         return None
     
     def validate_profile_picture(self, value):
@@ -276,15 +280,25 @@ class LogoutSerializer(serializers.Serializer):
 
 class DeleteAccountSerializer(serializers.Serializer):
     password = serializers.CharField()
+    
     def validate_password(self, value):
         user = self.context['request'].user
         if not user.check_password(value):
             raise serializers.ValidationError("Incorrect password.")
         return value
+        
     def save(self, **kwargs):
         user = self.context['request'].user
+        
+        suffix = f"_deleted_{uuid.uuid4().hex[:8]}"
         user.is_active = False
-        user.save(update_fields=['is_active'])
+        user.username = f"{user.username}{suffix}"[:150]
+        if user.email:
+            user.email = f"{user.email}{suffix}"
+        if user.phone:
+            user.phone = f"{user.phone}{suffix}"[:20]
+            
+        user.save(update_fields=['is_active', 'username', 'email', 'phone'])
 
 class ResendOTPSerializer(serializers.Serializer):
     identifier = serializers.CharField(required=True)

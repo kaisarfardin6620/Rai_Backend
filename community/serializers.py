@@ -6,6 +6,15 @@ from drf_spectacular.utils import extend_schema_field
 
 User = get_user_model()
 
+def build_safe_absolute_uri(request, url):
+    if not url:
+        return None
+    if url.startswith('http'):
+        return url
+    if request:
+        return request.build_absolute_uri(url)
+    return url
+
 class UserShortSerializer(serializers.ModelSerializer):
     profile_picture = serializers.SerializerMethodField()
 
@@ -16,10 +25,7 @@ class UserShortSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_profile_picture(self, obj):
         if obj.profile_picture:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.profile_picture.url)
-            return obj.profile_picture.url
+            return build_safe_absolute_uri(self.context.get('request'), obj.profile_picture.url)
         return None
 
 class JoinRequestSerializer(serializers.ModelSerializer):
@@ -40,10 +46,7 @@ class CommunityListSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_icon(self, obj):
         if obj.icon:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.icon.url)
-            return obj.icon.url
+            return build_safe_absolute_uri(self.context.get('request'), obj.icon.url)
         return None
 
 class MembershipSerializer(serializers.ModelSerializer):
@@ -74,10 +77,7 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_icon(self, obj):
         if obj.icon:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.icon.url)
-            return obj.icon.url
+            return build_safe_absolute_uri(self.context.get('request'), obj.icon.url)
         return None
 
     @extend_schema_field(serializers.IntegerField)
@@ -137,19 +137,13 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_image(self, obj):
         if obj.image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.image.url)
-            return obj.image.url
+            return build_safe_absolute_uri(self.context.get('request'), obj.image.url)
         return None
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_audio(self, obj):
         if obj.audio:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.audio.url)
-            return obj.audio.url
+            return build_safe_absolute_uri(self.context.get('request'), obj.audio.url)
         return None
 
 class CreateCommunitySerializer(serializers.ModelSerializer):

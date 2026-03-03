@@ -16,7 +16,6 @@ class CustomJSONRenderer(JSONRenderer):
         if isinstance(data, dict):
             if 'message' in data:
                 message = data.pop('message')
-            
             if 'detail' in data:
                 if isinstance(data['detail'], str):
                     message = data.pop('detail')
@@ -29,7 +28,16 @@ class CustomJSONRenderer(JSONRenderer):
         }
 
         if success:
-            response_data['data'] = data
+            if isinstance(data, dict) and 'results' in data and 'count' in data:
+                response_data['data'] = data.pop('results')
+                response_data['pagination'] = {
+                    'count': data.get('count'),
+                    'next': data.get('next'),
+                    'previous': data.get('previous')
+                }
+            else:
+                response_data['data'] = data
+                
             response_data['errors'] = None
         else:
             response_data['data'] = None

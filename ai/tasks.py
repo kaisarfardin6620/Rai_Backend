@@ -51,7 +51,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
 
         conversation = Conversation.objects.get(id=conversation_id)
 
-        if is_new_chat:
+        if is_new_chat and user_text:
             try:
                 title_res = client.chat.completions.create(
                     model=settings.OPENAI_MODEL,
@@ -85,7 +85,11 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             
         messages_payload.extend(hist_list)
         
-        current_content = [{"type": "text", "text": user_text}]
+        current_content = []
+        
+        if user_text:
+            current_content.append({"type": "text", "text": user_text})
+
         if image_id:
             try:
                 img_msg = Message.objects.get(id=image_id, conversation_id=conversation_id)
