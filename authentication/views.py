@@ -1,8 +1,14 @@
 import structlog
+import requests as http_requests
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
+from django.conf import settings
+from django.db import transaction
+from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes, throttle_classes, parser_classes
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -15,9 +21,89 @@ from .serializers import (
     MyTokenObtainPairSerializer, ResendOTPSerializer,
     EmailChangeInitiateSerializer, EmailChangeVerifySerializer
 )
+from .models import User
 from .services import AuthService
 
 logger = structlog.get_logger(__name__)
+
+@extend_schema(
+    request={"application/json": {"type": "object", "properties": {"id_token": {"type": "string"}}}},
+    responses={200: dict, 400: dict, 401: dict},
+    summary="Google Login / Sign-Up"
+)
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
+
+    def post(self, request):
+        token_str = request.data.get("id_token")
+        if not token_str:
+            return Response({"detail": "id_token is required"}, status=400)
+
+        try:
+            decoded = {}
+            if token_str.startswith("ya29"):
+                user_info_resp = http_requests.get(
+                    f"https://www.googleapis.com/oauth2/v3/userinfo?access_token={token_str}"
+                )
+                user_info_resp.raise_for_status()
+                decoded = user_info_resp.json()
+            else:
+                decoded = google_id_token.verify_oauth2_token(
+                    token_str,
+                    google_requests.Request(),
+                    settings.GOOGLE_CLIENT_ID
+                )
+                if decoded.get("aud") != settings.GOOGLE_CLIENT_ID:
+                    return Response({"detail": "Invalid token audience"}, status=401)
+
+            if not decoded.get("email_verified", False):
+                return Response({"detail": "Google email not verified"}, status=401)
+
+            email = decoded.get("email")
+            if not email:
+                return Response({"detail": "Email not provided by Google"}, status=400)
+
+            with transaction.atomic():
+                user, created = User.objects.get_or_create(
+                    email=email,
+                    defaults={
+                        "is_active": True,
+                        "username": email.split("@")[0],
+                        "is_email_verified": True,
+                    }
+                )
+                if created:
+                    base = email.split("@")[0]
+                    username = base
+                    suffix = 1
+                    while User.objects.filter(username=username).exclude(pk=user.pk).exists():
+                        username = f"{base}{suffix}"
+                        suffix += 1
+                    if user.username != username:
+                        user.username = username
+                        user.save(update_fields=["username"])
+
+            if not user.is_active:
+                return Response({"detail": "Account is disabled"}, status=403)
+
+            tokens = user.tokens
+            logger.info("google_login", user_id=user.id, created=created)
+            return Response({
+                "message": "Login successful",
+                "access": tokens["access"],
+                "refresh": tokens["refresh"],
+                "user": ProfileSerializer(user, context={"request": request}).data
+            }, status=200)
+
+        except ValueError:
+            return Response({"detail": "Invalid or expired Google token"}, status=401)
+        except http_requests.exceptions.RequestException:
+            return Response({"detail": "Failed to validate token with Google"}, status=400)
+        except Exception:
+            logger.exception("google_auth_error")
+            return Response({"detail": "Google authentication failed"}, status=400)
 
 @extend_schema(
     request=SignupInitiateSerializer,

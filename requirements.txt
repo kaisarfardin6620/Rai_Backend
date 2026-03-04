@@ -32,3 +32,6 @@ structlog==24.1.0
 drf-spectacular==0.27.1
 gevent==23.9.1
 structlog
+requests
+PyJWT
+cryptography

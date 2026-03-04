@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import RegexValidator
 from datetime import timedelta
+from rest_framework_simplejwt.tokens import RefreshToken
 
 class OTP(models.Model):
     identifier = models.CharField(max_length=255, db_index=True)
@@ -118,3 +119,8 @@ class User(AbstractUser):
             self.last_failed_login = None
             self.account_locked_until = None
             self.save(update_fields=['failed_login_attempts', 'last_failed_login', 'account_locked_until'])
+
+    @property
+    def tokens(self):
+        refresh = RefreshToken.for_user(self)
+        return {"refresh": str(refresh), "access": str(refresh.access_token)}
