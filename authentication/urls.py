@@ -7,7 +7,7 @@ from .views import (
     logout_view, delete_account, resend_otp,
     initiate_email_change, verify_email_change,
     resend_email_change_otp,
-    GoogleLoginView,
+    GoogleLoginView,initiate_phone_change, verify_phone_change, resend_phone_change_otp
 
 )
 
@@ -28,4 +28,7 @@ urlpatterns = [
     path('change-email/verify/', verify_email_change, name='change-email-verify'),
     path('change-email/resend/', resend_email_change_otp, name='change-email-resend'),
     path('google/', GoogleLoginView.as_view(), name='google-login'),
+    path('change-phone/initiate/', initiate_phone_change, name='change-phone-initiate'),
+    path('change-phone/verify/', verify_phone_change, name='change-phone-verify'),
+    path('change-phone/resend/', resend_phone_change_otp, name='change-phone-resend'),
 ]

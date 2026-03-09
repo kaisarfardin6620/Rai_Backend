@@ -19,7 +19,7 @@ from .serializers import (
     ProfileSerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
     PasswordChangeSerializer, LogoutSerializer, DeleteAccountSerializer,
     MyTokenObtainPairSerializer, ResendOTPSerializer,
-    EmailChangeInitiateSerializer, EmailChangeVerifySerializer
+    EmailChangeInitiateSerializer, EmailChangeVerifySerializer,PhoneChangeInitiateSerializer, PhoneChangeVerifySerializer
 )
 from .models import User
 from .services import AuthService
@@ -343,3 +343,59 @@ def resend_email_change_otp(request):
         return Response({"message": "OTP resent."})
     return Response({"message": message}, status=code)
 resend_email_change_otp.throttle_scope = 'otp'
+
+@extend_schema(request=PhoneChangeInitiateSerializer, responses={200: dict}, summary="Initiate Phone Change")
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def initiate_phone_change(request):
+    serializer = PhoneChangeInitiateSerializer(data=request.data, context={'request': request})
+    if serializer.is_valid():
+        new_phone = serializer.validated_data['new_phone']
+        success, message, code = AuthService.initiate_otp(new_phone, request)
+        if success:
+            from django.core.cache import cache
+            cache.set(f"pending_phone_change_{request.user.id}", new_phone, 600)
+            return Response({"message": f"OTP sent to {new_phone}"})
+        return Response({"message": message}, status=code)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+initiate_phone_change.throttle_scope = 'otp'
+
+@extend_schema(request=PhoneChangeVerifySerializer, responses={200: dict}, summary="Verify Phone Change")
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def verify_phone_change(request):
+    serializer = PhoneChangeVerifySerializer(data=request.data)
+    if serializer.is_valid():
+        from django.core.cache import cache
+        new_phone = cache.get(f"pending_phone_change_{request.user.id}")
+        if not new_phone:
+            return Response({"message": "Request expired or not found."}, status=400)
+
+        success, message, code = AuthService.verify_otp(new_phone, serializer.validated_data['otp'], request)
+        if success:
+            user = request.user
+            user.phone = new_phone
+            user.save(update_fields=['phone'])
+            cache.delete(f"pending_phone_change_{request.user.id}")
+            return Response({"message": "Phone number updated successfully.", "phone": new_phone})
+        return Response({"message": message}, status=code)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+verify_phone_change.throttle_scope = 'otp'
+
+@extend_schema(request=None, responses={200: dict}, summary="Resend Phone Change OTP")
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def resend_phone_change_otp(request):
+    from django.core.cache import cache
+    new_phone = cache.get(f"pending_phone_change_{request.user.id}")
+    if not new_phone:
+        return Response({"message": "No pending request found."}, status=400)
+        
+    success, message, code = AuthService.initiate_otp(new_phone, request)
+    if success:
+        return Response({"message": "OTP resent."})
+    return Response({"message": message}, status=code)
+resend_phone_change_otp.throttle_scope = 'otp'

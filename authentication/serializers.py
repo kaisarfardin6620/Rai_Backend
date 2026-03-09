@@ -332,3 +332,26 @@ class EmailChangeVerifySerializer(serializers.Serializer):
         if not value.isdigit():
             raise serializers.ValidationError("OTP must contain only digits.")
         return value
+    
+class PhoneChangeInitiateSerializer(serializers.Serializer):
+    new_phone = serializers.CharField(required=True)
+    
+    def validate_new_phone(self, value):
+        value = value.strip()
+        if not re.match(r'^\+?1?\d{9,15}$', value):
+            raise serializers.ValidationError("Invalid phone number format. Use '+999999999'.")
+            
+        user = self.context['request'].user
+        if value == user.phone:
+            raise serializers.ValidationError("New phone number cannot be the same as the current phone number.")
+        if User.objects.filter(phone=value).exists():
+            raise serializers.ValidationError("This phone number is already in use by another account.")
+        return value
+
+class PhoneChangeVerifySerializer(serializers.Serializer):
+    otp = serializers.CharField(min_length=6, max_length=6, required=True)
+    
+    def validate_otp(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError("OTP must contain only digits.")
+        return value
