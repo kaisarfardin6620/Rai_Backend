@@ -14,7 +14,7 @@ class Conversation(models.Model):
     total_tokens_used = models.IntegerField(default=0)
 
     class Meta:
-        ordering = ['-updated_at']
+        ordering =['-updated_at']
         indexes = [
             models.Index(fields=['user', '-updated_at']),
             models.Index(fields=['user', 'is_active']),
@@ -29,10 +29,16 @@ class Message(models.Model):
         ('user', 'User'),
         ('ai', 'AI'),
     )
+    STATUS_CHOICES = (
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    )
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages", db_index=True)
     sender = models.CharField(max_length=10, choices=SENDER_CHOICES, db_index=True)
     text = models.TextField(validators=[MaxLengthValidator(50000)], blank=True)
     image = models.ImageField(upload_to='chat_images/', null=True, blank=True, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='completed', db_index=True)
     token_count = models.IntegerField(default=0, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 

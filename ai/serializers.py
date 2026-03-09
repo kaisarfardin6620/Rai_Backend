@@ -8,7 +8,7 @@ class MessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Message
-        fields = ['id', 'sender', 'text', 'image_url', 'created_at']
+        fields =['id', 'sender', 'text', 'image_url', 'status', 'created_at'] 
         read_only_fields = ['id', 'created_at']
     
     @extend_schema_field(serializers.CharField(allow_null=True))

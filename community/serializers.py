@@ -64,15 +64,15 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
     member_count = serializers.SerializerMethodField()
     invite_link = serializers.SerializerMethodField()
     pending_request_count = serializers.SerializerMethodField()
+    group_link = serializers.SerializerMethodField() 
 
     class Meta:
         model = Community
-        fields = [
+        fields =[
             'id', 'name', 'description', 'icon', 'is_private', 'approval_required',
             'invite_code', 'invite_link', 'group_link', 'created_at', 'member_count', 
             'is_member', 'role', 'is_muted', 'pending_request_count'
         ]
-        read_only_fields = ['invite_code', 'invite_link', 'group_link', 'created_at']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_icon(self, obj):

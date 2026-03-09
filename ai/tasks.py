@@ -1,14 +1,13 @@
 import structlog
+import base64
+import re
 from celery import shared_task
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from django.conf import settings
-from django.db.models import F
-from openai import OpenAI, APIError
+from django.core.cache import cache
+from openai import OpenAI
 from .models import Conversation, Message
-import logging
-import base64
-import re
 
 logger = structlog.get_logger(__name__)
 
@@ -22,7 +21,7 @@ CRITICAL SECURITY INSTRUCTIONS:
 6. Be helpful, polite, and concise.
 """
 
-DANGEROUS_PATTERNS = [
+DANGEROUS_PATTERNS =[
     re.compile(r'ignore\s+(previous|all|prior|your)\s+instructions', re.IGNORECASE),
     re.compile(r'system:\s*you\s+are', re.IGNORECASE),
     re.compile(r'disregard\s+(all|previous)\s+rules', re.IGNORECASE),
@@ -35,11 +34,23 @@ def validate_input(text):
             return False
     return True
 
+def send_ws_message(conversation_id, message_data):
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"chat_{conversation_id}",
+        {
+            "type": "message_update",
+            "conversation_id": str(conversation_id),
+            "message": message_data
+        }
+    )
+
 @shared_task(bind=True, queue='ai_queue', max_retries=3)
 def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=False, image_id=None):
     channel_layer = get_channel_layer()
     group_name = f"chat_{conversation_id}"
     client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=30.0)
+    ai_msg = None
     
     try:
         if not validate_input(user_text):
@@ -50,6 +61,22 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             return
 
         conversation = Conversation.objects.get(id=conversation_id)
+
+        ai_msg = Message.objects.create(
+            conversation=conversation, 
+            sender='ai', 
+            text="",
+            status='processing'
+        )
+
+        send_ws_message(conversation_id, {
+            'id': ai_msg.id, 
+            'text': "", 
+            'sender': 'ai',
+            'is_ai': True, 
+            'status': 'processing',
+            'created_at': str(ai_msg.created_at)
+        })
 
         if is_new_chat and user_text:
             try:
@@ -72,21 +99,19 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
                 logger.error("title_generation_failed", error=str(e))
 
         messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
-        
-        msg_query = Message.objects.filter(conversation_id=conversation_id)
+        msg_query = Message.objects.filter(conversation_id=conversation_id).exclude(id=ai_msg.id)
         if image_id:
             msg_query = msg_query.exclude(id=image_id)
         recent_msgs = msg_query.order_by('-created_at')[:10]
         
-        hist_list = []
+        hist_list =[]
         for msg in reversed(recent_msgs):
             role = "assistant" if msg.sender == 'ai' else "user"
             hist_list.append({"role": role, "content": msg.text or ""})
             
         messages_payload.extend(hist_list)
         
-        current_content = []
-        
+        current_content =[]
         if user_text:
             current_content.append({"type": "text", "text": user_text})
 
@@ -98,7 +123,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
                         encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
                         
                     ext = img_msg.image.name.split('.')[-1].lower() if '.' in img_msg.image.name else 'jpeg'
-                    mime_type = f"image/{ext}" if ext in ['jpeg', 'png', 'webp', 'gif'] else "image/jpeg"
+                    mime_type = f"image/{ext}" if ext in['jpeg', 'png', 'webp', 'gif'] else "image/jpeg"
                     
                     current_content.append({
                         "type": "image_url",
@@ -109,7 +134,8 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             except Exception as e:
                 logger.error("vision_image_fetch_failed", error=str(e), image_id=image_id)
             
-        messages_payload.append({"role": "user", "content": current_content})
+        if current_content:
+            messages_payload.append({"role": "user", "content": current_content})
 
         response = client.chat.completions.create(
             model=settings.OPENAI_MODEL,
@@ -120,20 +146,36 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
         ai_text = response.choices[0].message.content
         tokens_used = response.usage.total_tokens
 
-        Message.objects.create(
-            conversation=conversation, 
-            sender='ai', 
-            text=ai_text,
-            token_count=tokens_used
-        )
+        ai_msg.text = ai_text
+        ai_msg.token_count = tokens_used
+        ai_msg.status = 'completed'
+        ai_msg.save(update_fields=['text', 'token_count', 'status'])
         
-        async_to_sync(channel_layer.group_send)(
-            group_name, 
-            {"type": "chat_message", "message": ai_text, "sender": "ai"}
-        )
+        send_ws_message(conversation_id, {
+            'id': ai_msg.id, 
+            'text': ai_text, 
+            'sender': 'ai',
+            'is_ai': True, 
+            'status': 'completed',
+            'created_at': str(ai_msg.created_at)
+        })
 
     except Exception as e:
         logger.error("ai_generation_failed", error=str(e), conversation_id=conversation_id)
-        async_to_sync(channel_layer.group_send)(
-            group_name, {"type": "chat_error", "message": "AI is currently unavailable."}
-        )
+        
+        if ai_msg:
+            ai_msg.status = 'failed'
+            ai_msg.text = "System Error. AI is currently unavailable."
+            ai_msg.save(update_fields=['status', 'text'])
+            
+            send_ws_message(conversation_id, {
+                'id': ai_msg.id, 
+                'text': ai_msg.text, 
+                'sender': 'ai',
+                'is_ai': True, 
+                'status': 'failed',
+                'created_at': str(ai_msg.created_at)
+            })
+
+    finally:
+        cache.delete(f"ai_processing_lock:{conversation_id}:{user_id}")
