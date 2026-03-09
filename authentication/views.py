@@ -156,7 +156,6 @@ def signup_finalize(request):
     serializer = SignupFinalizeSerializer(data=request.data)
     if serializer.is_valid():
         identifier = serializer.validated_data['identifier']
-        # Use lambda to delay save until inside transaction in service
         user, message, code = AuthService.register_user(
             identifier, 
             lambda: serializer.save()

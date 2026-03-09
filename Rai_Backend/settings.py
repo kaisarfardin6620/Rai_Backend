@@ -221,12 +221,30 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=int(os.getenv("JWT_ACCESS_HOURS", 1))),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", 7))),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "SIGNING_KEY": SECRET_KEY,
-    "AUTH_HEADER_TYPES": ("Bearer",),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=int(os.getenv('JWT_ACCESS_HOURS', 1))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_DAYS', 7))),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'JWK_URL': None,
+    'LEEWAY': 0,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+    'JTI_CLAIM': 'jti',
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(hours=1),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
 USE_AWS = os.getenv("USE_AWS", "False").lower() == "true"
@@ -277,22 +295,29 @@ LOGGING = {
             "formatter": "json",
         },
         "file": {
+            "level": "INFO",
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": LOGS_DIR / "app.log",
-            "maxBytes": 10 * 1024 * 1024,
-            "backupCount": 5,
+            "filename": LOGS_DIR / "django.log",
             "formatter": "json",
+            "maxBytes": 10485760,
+            "backupCount": 5,
         },
     },
     "loggers": {
-        "": {
-            "handlers": ["console", "file"], 
-            "level": LOG_LEVEL
+        "django": {
+            "handlers": ["console", "file"],
+            "level": os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            "propagate": True,
         },
-        "django": {"handlers": ["console", "file"], "level": LOG_LEVEL, "propagate": False},
-        "celery": {"handlers": ["console", "file"], "level": LOG_LEVEL, "propagate": False},
-        "ai": {"handlers": ["console", "file"], "level": LOG_LEVEL, "propagate": False},
-        "authentication": {"handlers":["console", "file"], "level": LOG_LEVEL, "propagate": False},
+        "django.db.backends": {
+            "handlers": ["console", "file"],
+            "level": os.getenv('DB_LOG_LEVEL', 'WARNING'),
+            "propagate": False,
+        },
+        "authentication": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
+        "chat": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
+        "core": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
+        "dashboard": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
     },
 }
 
