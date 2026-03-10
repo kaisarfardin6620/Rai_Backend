@@ -25,7 +25,7 @@ class ConversationSerializer(serializers.ModelSerializer):
 
 class AudioTranscribeSerializer(serializers.Serializer):
     audio = serializers.FileField(
-        validators=[FileExtensionValidator(allowed_extensions=['mp3', 'wav', 'm4a', 'webm'])]
+        validators=[FileExtensionValidator(allowed_extensions=['mp3', 'wav', 'm4a', 'webm', 'aac'])]
     )
 
     def validate_audio(self, value):
