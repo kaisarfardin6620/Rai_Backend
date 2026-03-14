@@ -163,6 +163,9 @@ CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", 300))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", 240))
+CELERY_TASK_ROUTES = {
+    "ai.tasks.generate_ai_response": {"queue": "ai_queue"},
+}
 
 AUTH_PASSWORD_VALIDATORS =[
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

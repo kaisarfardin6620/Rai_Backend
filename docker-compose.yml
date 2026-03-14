@@ -35,6 +35,9 @@ services:
     environment:
       RUNNING_IN_DOCKER: "true"
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      - media_volume:/app/media
+      - ./logs:/app/logs
     depends_on:
       - redis
       - web
@@ -48,6 +51,9 @@ services:
     environment:
       RUNNING_IN_DOCKER: "true"
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      - media_volume:/app/media
+      - ./logs:/app/logs
     depends_on:
       - redis
       - web
