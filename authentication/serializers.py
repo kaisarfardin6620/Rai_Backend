@@ -1,5 +1,6 @@
 import re
 import uuid
+import base64
 from rest_framework import serializers
 from .models import User, OTP
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -10,6 +11,22 @@ from django.utils.crypto import constant_time_compare
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema_field
+from django.core.files.base import ContentFile
+
+class Base64ImageField(serializers.ImageField):
+    def to_internal_value(self, data):
+        if isinstance(data, str) and data.startswith('data:image'):
+            try:
+                format, imgstr = data.split(';base64,')
+                ext = format.split('/')[-1]
+                data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4().hex}.{ext}")
+            except Exception:
+                raise serializers.ValidationError("Invalid base64 image data.")
+        elif hasattr(data, 'name') and len(data.name) > 100:
+            ext = data.name.split('.')[-1] if '.' in data.name else 'jpg'
+            if len(ext) > 5: ext = 'jpg'
+            data.name = f"{uuid.uuid4().hex}.{ext}"
+        return super().to_internal_value(data)
 
 class PasswordValidator:
     @staticmethod
@@ -66,7 +83,7 @@ class SignupFinalizeSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(required=True, max_length=100)
     bio = serializers.CharField(required=False, allow_blank=True, max_length=500)
     date_of_birth = serializers.DateField(required=False)
-    profile_picture = serializers.ImageField(required=False)
+    profile_picture = Base64ImageField(required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -157,7 +174,7 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise e
 
 class ProfileSerializer(serializers.ModelSerializer):
-    profile_picture = serializers.ImageField(required=False, allow_null=True)
+    profile_picture = Base64ImageField(required=False, allow_null=True)
     
     class Meta:
         model = User

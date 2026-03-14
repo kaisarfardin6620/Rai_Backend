@@ -12,15 +12,25 @@ class CommunityService:
 
     @staticmethod
     def create_community(user, validated_data):
-        with transaction.atomic():
-            community = Community.objects.create(**validated_data)
-            Membership.objects.create(
-                community=community,
-                user=user,
-                role='admin'
+        try:
+            with transaction.atomic():
+                community = Community.objects.create(**validated_data)
+                Membership.objects.create(
+                    community=community,
+                    user=user,
+                    role='admin'
+                )
+            logger.info("community_created", community_id=str(community.id), user_id=user.id)
+            return community
+        except Exception as e:
+            logger.error(
+                "community_create_db_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                user_id=user.id,
+                exc_info=True,
             )
-        logger.info("community_created", community_id=community.id, user_id=user.id)
-        return community
+            raise
 
     @staticmethod
     def join_by_code(user, invite_code):

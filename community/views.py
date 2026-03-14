@@ -46,11 +46,18 @@ class CommunityViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
             community = CommunityService.create_community(request.user, serializer.validated_data)
-            detail_serializer = CommunityDetailSerializer(community, context={'request': request})
-            return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error("community_create_failed", error=str(e), user_id=request.user.id, exc_info=True)
+            return Response(
+                {"detail": f"Failed to create community: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        detail_serializer = CommunityDetailSerializer(community, context={'request': request})
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -76,7 +83,11 @@ class CommunityViewSet(viewsets.ModelViewSet):
         if not request_id or not action_type:
             return Response({"detail": "Missing data"}, status=status.HTTP_400_BAD_REQUEST)
 
-        success, msg = CommunityService.process_join_request(request.user, request_id, action_type)
+        try:
+            success, msg = CommunityService.process_join_request(request.user, request_id, action_type)
+        except Exception as e:
+            logger.error("process_join_request_failed", error=str(e), exc_info=True)
+            return Response({"detail": "An error occurred processing the request."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         if success:
             return Response({"message": msg})
         return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)

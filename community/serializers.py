@@ -1,7 +1,9 @@
+import base64
+import uuid
+from django.core.files.base import ContentFile
 from rest_framework import serializers
 from .models import Community, Membership, CommunityMessage, JoinRequest
 from django.contrib.auth import get_user_model
-from django.core.validators import FileExtensionValidator
 from drf_spectacular.utils import extend_schema_field
 
 User = get_user_model()
@@ -15,6 +17,21 @@ def build_safe_absolute_uri(request, url):
         return request.build_absolute_uri(url)
     from django.conf import settings
     return f"{settings.SERVER_BASE_URL}{url}"
+
+class Base64ImageField(serializers.ImageField):
+    def to_internal_value(self, data):
+        if isinstance(data, str) and data.startswith('data:image'):
+            try:
+                format, imgstr = data.split(';base64,')
+                ext = format.split('/')[-1]
+                data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4().hex}.{ext}")
+            except Exception:
+                raise serializers.ValidationError("Invalid base64 image data.")
+        elif hasattr(data, 'name') and len(data.name) > 100:
+            ext = data.name.split('.')[-1] if '.' in data.name else 'jpg'
+            if len(ext) > 5: ext = 'jpg'
+            data.name = f"{uuid.uuid4().hex}.{ext}"
+        return super().to_internal_value(data)
 
 class UserShortSerializer(serializers.ModelSerializer):
     profile_picture = serializers.SerializerMethodField()
@@ -33,7 +50,7 @@ class JoinRequestSerializer(serializers.ModelSerializer):
     user = UserShortSerializer(read_only=True)
     class Meta:
         model = JoinRequest
-        fields = ['id', 'user', 'created_at']
+        fields =['id', 'user', 'created_at']
 
 class CommunityListSerializer(serializers.ModelSerializer):
     member_count = serializers.IntegerField(read_only=True)
@@ -58,7 +75,7 @@ class MembershipSerializer(serializers.ModelSerializer):
         fields =['id', 'user', 'role', 'is_muted', 'joined_at']
 
 class CommunityDetailSerializer(serializers.ModelSerializer):
-    icon = serializers.ImageField(required=False, allow_null=True)
+    icon = Base64ImageField(required=False, allow_null=True)
     is_member = serializers.SerializerMethodField()
     role = serializers.SerializerMethodField()
     is_muted = serializers.SerializerMethodField()
@@ -150,7 +167,7 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
         return None
 
 class CreateCommunitySerializer(serializers.ModelSerializer):
-    icon = serializers.ImageField(required=False)
+    icon = Base64ImageField(required=False, allow_null=True)
 
     class Meta:
         model = Community

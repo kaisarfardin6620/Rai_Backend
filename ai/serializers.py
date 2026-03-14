@@ -1,6 +1,24 @@
+import base64
+import uuid
+from django.core.files.base import ContentFile
 from rest_framework import serializers
 from .models import Conversation, Message
 from drf_spectacular.utils import extend_schema_field
+
+class Base64ImageField(serializers.ImageField):
+    def to_internal_value(self, data):
+        if isinstance(data, str) and data.startswith('data:image'):
+            try:
+                format, imgstr = data.split(';base64,')
+                ext = format.split('/')[-1]
+                data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4().hex}.{ext}")
+            except Exception:
+                raise serializers.ValidationError("Invalid base64 image data.")
+        elif hasattr(data, 'name') and len(data.name) > 100:
+            ext = data.name.split('.')[-1] if '.' in data.name else 'jpg'
+            if len(ext) > 5: ext = 'jpg'
+            data.name = f"{uuid.uuid4().hex}.{ext}"
+        return super().to_internal_value(data)
 
 class MessageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
@@ -27,7 +45,7 @@ class ConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Conversation
         fields =['id', 'title', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields =['id', 'created_at', 'updated_at']
 
 class AudioTranscribeSerializer(serializers.Serializer):
     audio = serializers.FileField()
@@ -38,11 +56,11 @@ class AudioTranscribeSerializer(serializers.Serializer):
         return value
 
 class ImageUploadSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField()
+    image = Base64ImageField()
 
     class Meta:
         model = Message
-        fields = ['image']
+        fields =['image']
 
     def validate_image(self, value):
         if value.size > 50 * 1024 * 1024:

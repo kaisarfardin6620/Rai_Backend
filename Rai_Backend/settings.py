@@ -5,6 +5,12 @@ from datetime import timedelta
 import dotenv
 import dj_database_url
 import structlog
+import django.http.multipartparser
+
+try:
+    django.http.multipartparser.MAX_TOTAL_HEADER_SIZE = 52428800
+except Exception:
+    pass
 
 dotenv.load_dotenv()
 
@@ -158,11 +164,6 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", 300))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", 240))
 
-CELERY_TASK_ROUTES = {
-    "ai.tasks.generate_ai_response": {"queue": "ai_queue"},
-    "*": {"queue": "default"},
-}
-
 AUTH_PASSWORD_VALIDATORS =[
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
@@ -196,14 +197,14 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
 FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
+    "DEFAULT_AUTHENTICATION_CLASSES":[
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_RENDERER_CLASSES":[
         "authentication.renderers.CustomJSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
-    "DEFAULT_THROTTLE_CLASSES": [
+    "DEFAULT_THROTTLE_CLASSES":[
         "rest_framework.throttling.ScopedRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
@@ -271,53 +272,81 @@ else:
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# --- Structlog ---
+# Human-readable colored output in DEBUG, compact JSON in production
+_shared_processors = [
+    structlog.stdlib.add_log_level,
+    structlog.stdlib.add_logger_name,
+    structlog.processors.TimeStamper(fmt="iso"),
+    structlog.processors.StackInfoRenderer(),
+    structlog.processors.format_exc_info,
+]
+
+if DEBUG:
+    _console_renderer = structlog.dev.ConsoleRenderer()
+else:
+    _console_renderer = structlog.processors.JSONRenderer()
+
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),
+        *_shared_processors,
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
     ],
     logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
 )
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "json": {
+        "structured": {
             "()": structlog.stdlib.ProcessorFormatter,
-            "processor": structlog.processors.JSONRenderer(),
+            "processor": _console_renderer,
+            "foreign_pre_chain": _shared_processors,
         },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "json",
+            "formatter": "structured",
         },
         "file": {
             "level": "INFO",
             "class": "logging.handlers.RotatingFileHandler",
             "filename": LOGS_DIR / "django.log",
-            "formatter": "json",
+            "formatter": "structured",
             "maxBytes": 10485760,
             "backupCount": 5,
         },
     },
     "loggers": {
+        "": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": True,
+        },
         "django": {
             "handlers": ["console", "file"],
-            "level": os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
-            "propagate": True,
+            "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
+            "propagate": False,
         },
         "django.db.backends": {
             "handlers": ["console", "file"],
-            "level": os.getenv('DB_LOG_LEVEL', 'WARNING'),
+            "level": os.getenv("DB_LOG_LEVEL", "WARNING"),
             "propagate": False,
         },
-        "authentication": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
-        "chat": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
-        "core": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
-        "dashboard": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
+        "django.request": {
+            "handlers": ["console", "file"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "authentication": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
+        "ai": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
+        "community": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
+        "support": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
+        "celery": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
     },
 }
 
