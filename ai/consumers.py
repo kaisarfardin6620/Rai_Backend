@@ -78,6 +78,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
             msg = await self.save_message(self.conversation_id, message_text, 'user', image_id)
 
+            from django.conf import settings
+            def format_url(url):
+                if not url: return None
+                if url.startswith('http'): return url
+                return f"{settings.SERVER_BASE_URL}{url}"
+
             await self.send_json({
                 'type': 'new_message',
                 'conversation_id': self.conversation_id,
@@ -88,6 +94,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'is_ai': False,
                     'status': msg.status,
                     'image_id': image_id,
+                    'image_url': format_url(msg.image.url) if msg.image else None,
                     'created_at': str(msg.created_at)
                 }
             })
@@ -168,6 +175,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_chat_history(self, conv_id):
         from .models import Message
+        from django.conf import settings
+        
+        def format_url(url):
+            if not url: return None
+            if url.startswith('http'): return url
+            return f"{settings.SERVER_BASE_URL}{url}"
+
         messages = Message.objects.filter(conversation_id=conv_id).order_by('created_at')
         return[
             {
@@ -177,6 +191,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 "is_ai": m.sender == 'ai',
                 "status": m.status,
                 "image_id": m.id if m.image else None,
+                "image_url": format_url(m.image.url) if m.image else None,
                 "created_at": str(m.created_at)
             }
             for m in messages

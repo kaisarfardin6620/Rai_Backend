@@ -5,7 +5,6 @@ from .models import User, OTP
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.conf import settings
-from django.core.validators import FileExtensionValidator
 from PIL import Image
 from django.utils.crypto import constant_time_compare
 from django.core.validators import validate_email
@@ -67,14 +66,11 @@ class SignupFinalizeSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(required=True, max_length=100)
     bio = serializers.CharField(required=False, allow_blank=True, max_length=500)
     date_of_birth = serializers.DateField(required=False)
-    profile_picture = serializers.ImageField(
-        required=False,
-        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png', 'webp'])]
-    )
+    profile_picture = serializers.ImageField(required=False)
 
     class Meta:
         model = User
-        fields = [
+        fields =[
             'identifier', 'username', 'password', 
             'first_name', 'last_name', 'bio', 
             'date_of_birth', 'profile_picture'
@@ -161,21 +157,28 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise e
 
 class ProfileSerializer(serializers.ModelSerializer):
-    profile_picture = serializers.SerializerMethodField()
+    profile_picture = serializers.ImageField(required=False, allow_null=True)
     
     class Meta:
         model = User
-        fields = ['username', 'email', 'phone', 'profile_picture', 'date_of_birth', 'bio', 'first_name', 'last_name']
+        fields =['username', 'email', 'phone', 'profile_picture', 'date_of_birth', 'bio', 'first_name', 'last_name']
         read_only_fields = ['username', 'email', 'phone']
 
-    @extend_schema_field(serializers.CharField(allow_null=True))
-    def get_profile_picture(self, obj):
-        if obj.profile_picture:
-            url = obj.profile_picture.url
-            if url.startswith('http'):
-                return url
-            return f"{settings.SERVER_BASE_URL}{url}"
-        return None
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.profile_picture:
+            url = instance.profile_picture.url
+            if not url.startswith('http'):
+                request = self.context.get('request')
+                if request:
+                    url = request.build_absolute_uri(url)
+                else:
+                    from django.conf import settings
+                    url = f"{settings.SERVER_BASE_URL}{url}"
+            data['profile_picture'] = url
+        else:
+            data['profile_picture'] = None
+        return data
     
     def validate_profile_picture(self, value):
         if value:

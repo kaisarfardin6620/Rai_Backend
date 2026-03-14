@@ -48,7 +48,8 @@ class CommunityConsumer(AsyncWebsocketConsumer):
             
             profile_pic = None
             if self.user.profile_picture:
-                profile_pic = f"{self.base_url}{self.user.profile_picture.url}"
+                url = self.user.profile_picture.url
+                profile_pic = url if url.startswith('http') else f"{self.base_url}{url}"
 
             await self.channel_layer.group_send(
                 self.room_group_name,
@@ -89,16 +90,21 @@ class CommunityConsumer(AsyncWebsocketConsumer):
             community_id=community_id
         ).select_related('sender').order_by('-created_at')[:50]
         
-        return [
+        def format_url(url):
+            if not url: return None
+            if url.startswith('http'): return url
+            return f"{base_url}{url}"
+
+        return[
             {
                 "id": str(m.id),
                 "message": m.text,
-                "image": f"{base_url}{m.image.url}" if m.image else None,
-                "audio": f"{base_url}{m.audio.url}" if m.audio else None,
+                "image": format_url(m.image.url) if m.image else None,
+                "audio": format_url(m.audio.url) if m.audio else None,
                 "sender": {
                     "id": m.sender.id,
                     "username": m.sender.username,
-                    "profile_picture": f"{base_url}{m.sender.profile_picture.url}" if m.sender.profile_picture else None
+                    "profile_picture": format_url(m.sender.profile_picture.url) if m.sender.profile_picture else None
                 },
                 "created_at": str(m.created_at)
             }

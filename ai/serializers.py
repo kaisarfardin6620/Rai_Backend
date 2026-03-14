@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from .models import Conversation, Message
-from django.core.validators import FileExtensionValidator
 from drf_spectacular.utils import extend_schema_field
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -14,19 +13,24 @@ class MessageSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_image_url(self, obj):
         if obj.image:
-            return obj.image.url
+            url = obj.image.url
+            if url.startswith('http'):
+                return url
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(url)
+            from django.conf import settings
+            return f"{settings.SERVER_BASE_URL}{url}"
         return None
 
 class ConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Conversation
-        fields = ['id', 'title', 'created_at', 'updated_at']
+        fields =['id', 'title', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 class AudioTranscribeSerializer(serializers.Serializer):
-    audio = serializers.FileField(
-        validators=[FileExtensionValidator(allowed_extensions=['mp3', 'wav', 'm4a', 'webm', 'aac'])]
-    )
+    audio = serializers.FileField()
 
     def validate_audio(self, value):
         if value.size > 10 * 1024 * 1024:
@@ -34,9 +38,7 @@ class AudioTranscribeSerializer(serializers.Serializer):
         return value
 
 class ImageUploadSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(
-        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png', 'webp'])]
-    )
+    image = serializers.ImageField()
 
     class Meta:
         model = Message

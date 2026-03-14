@@ -98,12 +98,15 @@ def transcribe_audio(request):
     try:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
-        if not hasattr(audio_file, 'name') or not audio_file.name:
-            audio_file.name = 'audio.m4a'
+        filename = audio_file.name if hasattr(audio_file, 'name') and audio_file.name else 'audio.webm'
+        if '.' not in filename or filename.split('.')[-1].lower() not in['mp3', 'wav', 'm4a', 'webm', 'aac', 'ogg', 'flac', 'mp4']:
+            filename = 'audio.webm'
+            
+        file_tuple = (filename, audio_file.read())
             
         transcript = client.audio.transcriptions.create(
             model="whisper-1", 
-            file=audio_file
+            file=file_tuple
         )
         return Response({"text": transcript.text})
 
@@ -141,10 +144,15 @@ def upload_chat_image(request):
             text='',
             image=serializer.validated_data['image']
         )
+        
+        url = message.image.url
+        if not url.startswith('http'):
+            url = request.build_absolute_uri(url)
+            
         return Response({
             "message": "Image uploaded", 
             "image_id": message.id, 
-            "url": message.image.url
+            "url": url
         })
     except Conversation.DoesNotExist:
         return Response({"detail": "Conversation not found"}, status=404)

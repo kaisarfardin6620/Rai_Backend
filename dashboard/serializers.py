@@ -15,12 +15,19 @@ class AdminUserListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'photo', 'name', 'email', 'phone', 'join_date', 'status', 'is_active']
+        fields =['id', 'photo', 'name', 'email', 'phone', 'join_date', 'status', 'is_active']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_photo(self, obj):
         if obj.profile_picture:
-            return obj.profile_picture.url
+            url = obj.profile_picture.url
+            if not url.startswith('http'):
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(url)
+                from django.conf import settings
+                return f"{settings.SERVER_BASE_URL}{url}"
+            return url
         return None
 
     @extend_schema_field(serializers.CharField)
@@ -46,12 +53,19 @@ class AdminCommunityListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Community
-        fields = ['id', 'photo', 'name', 'member_count', 'group_link', 'create_date', 'status']
+        fields =['id', 'photo', 'name', 'member_count', 'group_link', 'create_date', 'status']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_photo(self, obj):
         if obj.icon:
-            return obj.icon.url
+            url = obj.icon.url
+            if not url.startswith('http'):
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(url)
+                from django.conf import settings
+                return f"{settings.SERVER_BASE_URL}{url}"
+            return url
         return None
 
     @extend_schema_field(serializers.CharField)
@@ -76,7 +90,7 @@ class AdminSupportTicketSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = SupportTicket
-        fields = [
+        fields =[
             'id', 'create_date', 'reply_date', 'user_name', 'user_email', 
             'message', 'admin_response', 'status'
         ]
@@ -94,5 +108,5 @@ class AdminSupportTicketSerializer(serializers.ModelSerializer):
 class AppPageSerializer(serializers.ModelSerializer):
     class Meta:
         model = AppPage
-        fields = ['slug', 'title', 'content', 'updated_at']
+        fields =['slug', 'title', 'content', 'updated_at']
         read_only_fields = ['updated_at']

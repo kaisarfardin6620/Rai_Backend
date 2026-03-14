@@ -13,14 +13,15 @@ def build_safe_absolute_uri(request, url):
         return url
     if request:
         return request.build_absolute_uri(url)
-    return url
+    from django.conf import settings
+    return f"{settings.SERVER_BASE_URL}{url}"
 
 class UserShortSerializer(serializers.ModelSerializer):
     profile_picture = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'profile_picture']
+        fields =['id', 'username', 'first_name', 'last_name', 'profile_picture']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_profile_picture(self, obj):
@@ -40,8 +41,8 @@ class CommunityListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Community
-        fields = ['id', 'name', 'icon', 'member_count', 'updated_at']
-        read_only_fields = ['icon']
+        fields =['id', 'name', 'icon', 'member_count', 'updated_at']
+        read_only_fields =['icon']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_icon(self, obj):
@@ -54,10 +55,10 @@ class MembershipSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Membership
-        fields = ['id', 'user', 'role', 'is_muted', 'joined_at']
+        fields =['id', 'user', 'role', 'is_muted', 'joined_at']
 
 class CommunityDetailSerializer(serializers.ModelSerializer):
-    icon = serializers.SerializerMethodField()
+    icon = serializers.ImageField(required=False, allow_null=True)
     is_member = serializers.SerializerMethodField()
     role = serializers.SerializerMethodField()
     is_muted = serializers.SerializerMethodField()
@@ -74,11 +75,13 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
             'is_member', 'role', 'is_muted', 'pending_request_count'
         ]
 
-    @extend_schema_field(serializers.CharField(allow_null=True))
-    def get_icon(self, obj):
-        if obj.icon:
-            return build_safe_absolute_uri(self.context.get('request'), obj.icon.url)
-        return None
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.icon:
+            data['icon'] = build_safe_absolute_uri(self.context.get('request'), instance.icon.url)
+        else:
+            data['icon'] = None
+        return data
 
     @extend_schema_field(serializers.IntegerField)
     def get_member_count(self, obj):
@@ -131,8 +134,8 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CommunityMessage
-        fields = ['id', 'community', 'sender', 'text', 'image', 'audio', 'created_at']
-        read_only_fields = ['id', 'created_at', 'sender', 'image', 'audio']
+        fields =['id', 'community', 'sender', 'text', 'image', 'audio', 'created_at']
+        read_only_fields =['id', 'created_at', 'sender', 'image', 'audio']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_image(self, obj):
@@ -147,14 +150,11 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
         return None
 
 class CreateCommunitySerializer(serializers.ModelSerializer):
-    icon = serializers.ImageField(
-        required=False, 
-        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png', 'webp'])]
-    )
+    icon = serializers.ImageField(required=False)
 
     class Meta:
         model = Community
-        fields = ['name', 'description', 'icon', 'is_private', 'approval_required']
+        fields =['name', 'description', 'icon', 'is_private', 'approval_required']
 
     def validate_icon(self, value):
         if value and value.size > 50 * 1024 * 1024:
