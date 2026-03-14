@@ -196,8 +196,8 @@ CSRF_TRUSTED_ORIGINS =[
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
-FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600
+FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES":[
@@ -206,6 +206,11 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES":[
         "authentication.renderers.CustomJSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES":[
+        "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.MultiPartParser",
+        "rest_framework.parsers.FormParser",
     ],
     "DEFAULT_THROTTLE_CLASSES":[
         "rest_framework.throttling.ScopedRateThrottle",

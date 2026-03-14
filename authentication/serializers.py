@@ -22,10 +22,6 @@ class Base64ImageField(serializers.ImageField):
                 data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4().hex}.{ext}")
             except Exception:
                 raise serializers.ValidationError("Invalid base64 image data.")
-        elif hasattr(data, 'name') and len(data.name) > 100:
-            ext = data.name.split('.')[-1] if '.' in data.name else 'jpg'
-            if len(ext) > 5: ext = 'jpg'
-            data.name = f"{uuid.uuid4().hex}.{ext}"
         return super().to_internal_value(data)
 
 class PasswordValidator:
