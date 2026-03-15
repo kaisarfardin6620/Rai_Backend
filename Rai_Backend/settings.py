@@ -28,7 +28,7 @@ if not SECRET_KEY:
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS =[h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
 
 SERVER_BASE_URL = os.getenv("SERVER_BASE_URL", "http://localhost:8000")
 
@@ -39,12 +39,12 @@ RUNNING_IN_DOCKER = os.getenv("RUNNING_IN_DOCKER", "false") == "true"
 
 AUTH_USER_MODEL = "authentication.User"
 
-AUTHENTICATION_BACKENDS =[
+AUTHENTICATION_BACKENDS = [
     "authentication.auth_backend.MultiFieldAuthBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 
-INSTALLED_APPS =[
+INSTALLED_APPS = [
     "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -69,7 +69,7 @@ INSTALLED_APPS =[
     "support",
 ]
 
-MIDDLEWARE =[
+MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -85,12 +85,12 @@ ROOT_URLCONF = "Rai_Backend.urls"
 WSGI_APPLICATION = "Rai_Backend.wsgi.application"
 ASGI_APPLICATION = "Rai_Backend.asgi.application"
 
-TEMPLATES =[
+TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "APP_DIRS": True,
         "OPTIONS": {
-            "context_processors":[
+            "context_processors": [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
@@ -115,7 +115,7 @@ if DATABASE_URL:
 else:
     if not DEBUG:
         raise ValueError("DATABASE_URL (or DATABASE_BASE_URL) environment variable must be set in production!")
-        
+
     db_path = BASE_DIR / ("dbs/db.sqlite3" if RUNNING_IN_DOCKER else "db.sqlite3")
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -137,7 +137,7 @@ CACHES = {
         "LOCATION": REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "IGNORE_EXCEPTIONS": not DEBUG,
+            "IGNORE_EXCEPTIONS": False,
         },
         "TIMEOUT": int(os.getenv("CACHE_DEFAULT_TIMEOUT", 300)),
         "KEY_PREFIX": os.getenv("CACHE_KEY_PREFIX", "rai"),
@@ -148,8 +148,8 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts":[REDIS_URL],
-            "expiry": int(os.getenv("CHANNEL_EXPIRY", 300)),
+            "hosts": [REDIS_URL],
+            "expiry": int(os.getenv("CHANNEL_EXPIRY", 900)),
         },
     }
 }
@@ -167,7 +167,7 @@ CELERY_TASK_ROUTES = {
     "ai.tasks.generate_ai_response": {"queue": "ai_queue"},
 }
 
-AUTH_PASSWORD_VALIDATORS =[
+AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
@@ -189,9 +189,16 @@ if not DEBUG:
 
 CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "False").lower() == "true"
 if not CORS_ALLOW_ALL_ORIGINS:
-    CORS_ALLOWED_ORIGINS =[o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+    if not CORS_ALLOWED_ORIGINS and not DEBUG:
+        import warnings
+        warnings.warn(
+            "CORS_ALLOWED_ORIGINS is empty and CORS_ALLOW_ALL_ORIGINS is False. "
+            "All cross-origin requests will be blocked. Set CORS_ALLOWED_ORIGINS in your .env.",
+            stacklevel=2
+        )
 
-CSRF_TRUSTED_ORIGINS =[
+CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
@@ -200,19 +207,19 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES":[
+    "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    "DEFAULT_RENDERER_CLASSES":[
+    "DEFAULT_RENDERER_CLASSES": [
         "authentication.renderers.CustomJSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
-    "DEFAULT_PARSER_CLASSES":[
+    "DEFAULT_PARSER_CLASSES": [
         "rest_framework.parsers.JSONParser",
         "rest_framework.parsers.MultiPartParser",
         "rest_framework.parsers.FormParser",
     ],
-    "DEFAULT_THROTTLE_CLASSES":[
+    "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.ScopedRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
@@ -230,7 +237,7 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=int(os.getenv('JWT_ACCESS_HOURS', 1000))),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=int(os.getenv('JWT_ACCESS_HOURS', 1))),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_DAYS', 70))),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -280,8 +287,6 @@ else:
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-# --- Structlog ---
-# Human-readable colored output in DEBUG, compact JSON in production
 _shared_processors = [
     structlog.stdlib.add_log_level,
     structlog.stdlib.add_logger_name,

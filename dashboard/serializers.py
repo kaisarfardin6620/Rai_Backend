@@ -7,6 +7,7 @@ from drf_spectacular.utils import extend_schema_field
 
 User = get_user_model()
 
+
 class AdminUserListSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
     join_date = serializers.SerializerMethodField()
@@ -15,7 +16,7 @@ class AdminUserListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields =['id', 'photo', 'name', 'email', 'phone', 'join_date', 'status', 'is_active']
+        fields = ['id', 'photo', 'name', 'email', 'phone', 'join_date', 'status', 'is_active']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_photo(self, obj):
@@ -38,11 +39,12 @@ class AdminUserListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField)
     def get_join_date(self, obj):
-        return obj.created_at.strftime("%d Sep %y, %I:%M %p")
+        return obj.created_at.strftime("%d %b %y, %I:%M %p")
 
     @extend_schema_field(serializers.CharField)
     def get_status(self, obj):
         return "Active" if obj.is_active else "Inactive"
+
 
 class AdminCommunityListSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
@@ -53,7 +55,7 @@ class AdminCommunityListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Community
-        fields =['id', 'photo', 'name', 'member_count', 'group_link', 'create_date', 'status']
+        fields = ['id', 'photo', 'name', 'member_count', 'group_link', 'create_date', 'status']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_photo(self, obj):
@@ -76,37 +78,39 @@ class AdminCommunityListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField)
     def get_create_date(self, obj):
-        return obj.created_at.strftime("%d Sep %y, %I:%M %p")
+        return obj.created_at.strftime("%d %b %y, %I:%M %p")
 
     @extend_schema_field(serializers.CharField)
     def get_status(self, obj):
         return "Active"
+
 
 class AdminSupportTicketSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
     user_email = serializers.EmailField(source='user.email', read_only=True)
     create_date = serializers.SerializerMethodField()
     reply_date = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = SupportTicket
-        fields =[
-            'id', 'create_date', 'reply_date', 'user_name', 'user_email', 
+        fields = [
+            'id', 'create_date', 'reply_date', 'user_name', 'user_email',
             'message', 'admin_response', 'status'
         ]
 
     @extend_schema_field(serializers.CharField)
     def get_create_date(self, obj):
-        return obj.created_at.strftime("%d Sep %y, %I:%M %p")
+        return obj.created_at.strftime("%d %b %y, %I:%M %p")
 
     @extend_schema_field(serializers.CharField)
     def get_reply_date(self, obj):
-        if obj.updated_at and obj.admin_response:
-            return obj.updated_at.strftime("%d Sep %y, %I:%M %p")
+        if obj.replied_at:
+            return obj.replied_at.strftime("%d %b %y, %I:%M %p")
         return "--"
+
 
 class AppPageSerializer(serializers.ModelSerializer):
     class Meta:
         model = AppPage
-        fields =['slug', 'title', 'content', 'updated_at']
+        fields = ['slug', 'title', 'content', 'updated_at']
         read_only_fields = ['updated_at']
