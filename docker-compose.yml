@@ -7,10 +7,10 @@ services:
       - "8000:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
-      - static_volume:/app/staticfiles
       - media_volume:/app/media
     depends_on:
       - web
+      
   web:
     build: .
     container_name: rai_web
@@ -20,12 +20,13 @@ services:
     environment:
       RUNNING_IN_DOCKER: "true"
       REDIS_URL: redis://redis:6379/0
+      RUN_MIGRATIONS: "true"  # Set to "false" on replicas if scaling > 1
     volumes:
-      - static_volume:/app/staticfiles
       - media_volume:/app/media
       - ./logs:/app/logs
     depends_on:
       - redis
+      
   celery_ai:
     build: .
     container_name: rai_celery_ai
@@ -42,6 +43,7 @@ services:
       - redis
       - web
     command: celery -A Rai_Backend worker --pool=gevent --concurrency=100 -Q ai_queue -n worker_ai@%h --loglevel=info
+    
   celery_general:
     build: .
     container_name: rai_celery_general
@@ -57,20 +59,9 @@ services:
     depends_on:
       - redis
       - web
-    command: celery -A Rai_Backend worker --pool=prefork --concurrency=4 -Q default -n worker_general@%h --loglevel=info
-  celery_beat:
-    build: .
-    container_name: rai_beat
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      RUNNING_IN_DOCKER: "true"
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      - redis
-      - web
-    command: celery -A Rai_Backend beat --loglevel=info
+    # FIXED: Queue changed to celery
+    command: celery -A Rai_Backend worker --pool=prefork --concurrency=4 -Q celery -n worker_general@%h --loglevel=info
+    
   redis:
     image: redis:7-alpine
     container_name: rai_redis
@@ -81,6 +72,5 @@ services:
       - redis_data:/data
 
 volumes:
-  static_volume:
   media_volume:
   redis_data:
