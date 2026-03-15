@@ -11,7 +11,6 @@ if echo "$DB_URL" | grep -q "postgre"; then
     DB_PORT=$(echo "$DB_URL" | sed -e 's/.*:\([0-9]*\)\/.*/\1/')
     DB_PORT="${DB_PORT:-5432}"
     
-    # FIXED: Replaced flaky 'nc' with reliable Python socket connection
     python -c "
 import socket, time
 host, port = '$DB_HOST', int('$DB_PORT')
@@ -28,8 +27,7 @@ fi
 if echo "$@" | grep -q "gunicorn"; then
     echo "Running initialization tasks for Web Container..."
     
-    # FIXED: Condition added to prevent Race Conditions when scaling
-    if[ "$RUN_MIGRATIONS" = "true" ]; then
+    if [ "$RUN_MIGRATIONS" = "true" ]; then
         echo "Applying migrations..."
         python manage.py migrate --noinput
 

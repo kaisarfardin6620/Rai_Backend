@@ -3,7 +3,7 @@ import requests as http_requests
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes, throttle_classes, parser_classes
 from rest_framework.response import Response
@@ -15,16 +15,18 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_spectacular.utils import extend_schema
 
 from .serializers import (
-    SignupInitiateSerializer, SignupVerifySerializer, SignupFinalizeSerializer, 
+    SignupInitiateSerializer, SignupVerifySerializer, SignupFinalizeSerializer,
     ProfileSerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
     PasswordChangeSerializer, LogoutSerializer, DeleteAccountSerializer,
     MyTokenObtainPairSerializer, ResendOTPSerializer,
-    EmailChangeInitiateSerializer, EmailChangeVerifySerializer,PhoneChangeInitiateSerializer, PhoneChangeVerifySerializer
+    EmailChangeInitiateSerializer, EmailChangeVerifySerializer,
+    PhoneChangeInitiateSerializer, PhoneChangeVerifySerializer
 )
 from .models import User
 from .services import AuthService
 
 logger = structlog.get_logger(__name__)
+
 
 @extend_schema(
     request={"application/json": {"type": "object", "properties": {"id_token": {"type": "string"}}}},
@@ -65,25 +67,30 @@ class GoogleLoginView(APIView):
             if not email:
                 return Response({"detail": "Email not provided by Google"}, status=400)
 
+            # FIX: Pre-generate a safe unique username before get_or_create to
+            # avoid an IntegrityError if email.split("@")[0] is already taken.
             with transaction.atomic():
-                user, created = User.objects.get_or_create(
-                    email=email,
-                    defaults={
-                        "is_active": True,
-                        "username": email.split("@")[0],
-                        "is_email_verified": True,
-                    }
-                )
-                if created:
-                    base = email.split("@")[0]
+                existing = User.objects.filter(email=email).first()
+                if existing:
+                    user = existing
+                    created = False
+                else:
+                    base = email.split("@")[0].lower()
                     username = base
                     suffix = 1
-                    while User.objects.filter(username=username).exclude(pk=user.pk).exists():
+                    while User.objects.filter(username=username).exists():
                         username = f"{base}{suffix}"
                         suffix += 1
-                    if user.username != username:
-                        user.username = username
-                        user.save(update_fields=["username"])
+
+                    user = User.objects.create(
+                        email=email,
+                        username=username,
+                        is_active=True,
+                        is_email_verified=True,
+                    )
+                    user.set_unusable_password()
+                    user.save(update_fields=['password'])
+                    created = True
 
             if not user.is_active:
                 return Response({"detail": "Account is disabled"}, status=403)
@@ -101,9 +108,13 @@ class GoogleLoginView(APIView):
             return Response({"detail": "Invalid or expired Google token"}, status=401)
         except http_requests.exceptions.RequestException:
             return Response({"detail": "Failed to validate token with Google"}, status=400)
+        except IntegrityError:
+            logger.exception("google_auth_integrity_error")
+            return Response({"detail": "Account creation failed. Please try again."}, status=400)
         except Exception:
             logger.exception("google_auth_error")
             return Response({"detail": "Google authentication failed"}, status=400)
+
 
 @extend_schema(
     request=SignupInitiateSerializer,
@@ -122,6 +133,7 @@ def signup_initiate(request):
         return Response({"message": message}, status=code)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 signup_initiate.throttle_scope = 'otp'
+
 
 @extend_schema(
     request=SignupVerifySerializer,
@@ -144,6 +156,7 @@ def signup_verify(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 signup_verify.throttle_scope = 'anon'
 
+
 @extend_schema(
     request=SignupFinalizeSerializer,
     responses={201: dict, 400: dict},
@@ -153,20 +166,22 @@ signup_verify.throttle_scope = 'anon'
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 @throttle_classes([ScopedRateThrottle])
 def signup_finalize(request):
-    serializer = SignupFinalizeSerializer(data=request.data)
+    # FIX: Pass request in context so profile_picture URLs are absolute
+    # and so any serializer field that needs request access has it.
+    serializer = SignupFinalizeSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
         identifier = serializer.validated_data['identifier']
         user, message, code = AuthService.register_user(
-            identifier, 
+            identifier,
             lambda: serializer.save()
         )
 
         if not user:
-             return Response({"message": message}, status=code)
+            return Response({"message": message}, status=code)
 
         tokens = AuthService.login_user(user)
         user_data = ProfileSerializer(user, context={'request': request}).data
-        
+
         response_data = tokens
         response_data['user'] = user_data
         response_data['message'] = "Account created successfully."
@@ -175,6 +190,7 @@ def signup_finalize(request):
         return Response(response_data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 signup_finalize.throttle_scope = 'anon'
+
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
@@ -191,6 +207,7 @@ class MyTokenObtainPairView(TokenObtainPairView):
         except Exception as e:
             raise e
 
+
 @extend_schema(responses={200: ProfileSerializer}, summary="Get Profile")
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -200,18 +217,28 @@ def get_profile(request):
     return Response(serializer.data)
 get_profile.throttle_scope = 'user'
 
+
 @extend_schema(request=ProfileSerializer, responses={200: ProfileSerializer}, summary="Update Profile")
-@api_view(['PUT'])
+@api_view(['PUT', 'PATCH'])
 @permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 @throttle_classes([ScopedRateThrottle])
 def update_profile(request):
-    serializer = ProfileSerializer(request.user, data=request.data, partial=True, context={'request': request})
+    serializer = ProfileSerializer(
+        request.user,
+        data=request.data,
+        partial=True,
+        context={'request': request}
+    )
     if serializer.is_valid():
         serializer.save()
-        return Response({"message": "Profile updated", "data": serializer.data})
+        # FIX: Don't nest data manually — CustomJSONRenderer wraps it already.
+        # Previously returned {"message": ..., "data": serializer.data} which
+        # caused the renderer to produce data.data in the final response.
+        return Response({"message": "Profile updated successfully.", **serializer.data})
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 update_profile.throttle_scope = 'user'
+
 
 @extend_schema(request=PasswordResetRequestSerializer, responses={200: dict}, summary="Request Password Reset")
 @api_view(['POST'])
@@ -222,10 +249,11 @@ def password_reset_request(request):
         identifier = serializer.validated_data['identifier']
         success, message, code = AuthService.initiate_otp(identifier, request)
         if success:
-             return Response({"message": "If account exists, OTP sent."}, status=200)
+            return Response({"message": "If account exists, OTP sent."}, status=200)
         return Response({"message": message}, status=code)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 password_reset_request.throttle_scope = 'otp'
+
 
 @extend_schema(request=PasswordResetConfirmSerializer, responses={200: dict}, summary="Confirm Password Reset")
 @api_view(['POST'])
@@ -237,6 +265,7 @@ def password_reset_confirm(request):
         return Response({"message": "Password reset successfully."})
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 password_reset_confirm.throttle_scope = 'anon'
+
 
 @extend_schema(request=PasswordChangeSerializer, responses={200: dict}, summary="Change Password")
 @api_view(['POST'])
@@ -250,6 +279,7 @@ def change_password(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 change_password.throttle_scope = 'user'
 
+
 @extend_schema(request=LogoutSerializer, responses={200: dict}, summary="Logout")
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -262,6 +292,7 @@ def logout_view(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 logout_view.throttle_scope = 'user'
 
+
 @extend_schema(request=DeleteAccountSerializer, responses={200: dict}, summary="Delete Account")
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
@@ -273,6 +304,7 @@ def delete_account(request):
         return Response({"message": "Account deactivated."})
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 delete_account.throttle_scope = 'user'
+
 
 @extend_schema(request=ResendOTPSerializer, responses={200: dict}, summary="Resend OTP")
 @api_view(['POST'])
@@ -287,6 +319,7 @@ def resend_otp(request):
         return Response({"message": message}, status=code)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 resend_otp.throttle_scope = 'otp'
+
 
 @extend_schema(request=EmailChangeInitiateSerializer, responses={200: dict}, summary="Initiate Email Change")
 @api_view(['POST'])
@@ -305,6 +338,7 @@ def initiate_email_change(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 initiate_email_change.throttle_scope = 'otp'
 
+
 @extend_schema(request=EmailChangeVerifySerializer, responses={200: dict}, summary="Verify Email Change")
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -317,7 +351,9 @@ def verify_email_change(request):
         if not new_email:
             return Response({"message": "Request expired."}, status=400)
 
-        success, message, code = AuthService.verify_otp(new_email, serializer.validated_data['otp'], request)
+        success, message, code = AuthService.verify_otp(
+            new_email, serializer.validated_data['otp'], request
+        )
         if success:
             user = request.user
             user.email = new_email
@@ -328,6 +364,7 @@ def verify_email_change(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 verify_email_change.throttle_scope = 'otp'
 
+
 @extend_schema(request=None, responses={200: dict}, summary="Resend Email Change OTP")
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -337,12 +374,13 @@ def resend_email_change_otp(request):
     new_email = cache.get(f"pending_email_change_{request.user.id}")
     if not new_email:
         return Response({"message": "No pending request found."}, status=400)
-        
+
     success, message, code = AuthService.initiate_otp(new_email, request)
     if success:
         return Response({"message": "OTP resent."})
     return Response({"message": message}, status=code)
 resend_email_change_otp.throttle_scope = 'otp'
+
 
 @extend_schema(request=PhoneChangeInitiateSerializer, responses={200: dict}, summary="Initiate Phone Change")
 @api_view(['POST'])
@@ -361,6 +399,7 @@ def initiate_phone_change(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 initiate_phone_change.throttle_scope = 'otp'
 
+
 @extend_schema(request=PhoneChangeVerifySerializer, responses={200: dict}, summary="Verify Phone Change")
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -373,7 +412,9 @@ def verify_phone_change(request):
         if not new_phone:
             return Response({"message": "Request expired or not found."}, status=400)
 
-        success, message, code = AuthService.verify_otp(new_phone, serializer.validated_data['otp'], request)
+        success, message, code = AuthService.verify_otp(
+            new_phone, serializer.validated_data['otp'], request
+        )
         if success:
             user = request.user
             user.phone = new_phone
@@ -384,6 +425,7 @@ def verify_phone_change(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 verify_phone_change.throttle_scope = 'otp'
 
+
 @extend_schema(request=None, responses={200: dict}, summary="Resend Phone Change OTP")
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -393,7 +435,7 @@ def resend_phone_change_otp(request):
     new_phone = cache.get(f"pending_phone_change_{request.user.id}")
     if not new_phone:
         return Response({"message": "No pending request found."}, status=400)
-        
+
     success, message, code = AuthService.initiate_otp(new_phone, request)
     if success:
         return Response({"message": "OTP resent."})

@@ -1,9 +1,11 @@
 from django.db import models
+from django.db.models import F
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import RegexValidator
 from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
+
 
 class OTP(models.Model):
     identifier = models.CharField(max_length=255, db_index=True)
@@ -20,7 +22,10 @@ class OTP(models.Model):
         ordering = ['-created_at']
 
     def is_valid(self):
-        return timezone.now() < self.created_at + timedelta(minutes=3) and self.attempts < 5
+        return (
+            timezone.now() < self.created_at + timedelta(minutes=3)
+            and self.attempts < 5
+        )
 
     def increment_attempts(self):
         self.attempts += 1
@@ -34,10 +39,12 @@ class OTP(models.Model):
     def __repr__(self):
         return f"<OTP {self.identifier}: {self.code}>"
 
+
 phone_regex = RegexValidator(
     regex=r'^\+?1?\d{9,15}$',
     message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
 )
+
 
 class User(AbstractUser):
     phone = models.CharField(
@@ -105,13 +112,17 @@ class User(AbstractUser):
         return False
 
     def record_failed_login(self):
-        self.failed_login_attempts += 1
-        self.last_failed_login = timezone.now()
-        
+        User.objects.filter(pk=self.pk).update(
+            failed_login_attempts=F('failed_login_attempts') + 1,
+            last_failed_login=timezone.now()
+        )
+        self.refresh_from_db(fields=['failed_login_attempts', 'last_failed_login'])
+
         if self.failed_login_attempts >= 5:
-            self.account_locked_until = timezone.now() + timedelta(minutes=15)
-        
-        self.save(update_fields=['failed_login_attempts', 'last_failed_login', 'account_locked_until'])
+            User.objects.filter(pk=self.pk).update(
+                account_locked_until=timezone.now() + timedelta(minutes=15)
+            )
+            self.refresh_from_db(fields=['account_locked_until'])
 
     def reset_failed_logins(self):
         if self.failed_login_attempts > 0:
