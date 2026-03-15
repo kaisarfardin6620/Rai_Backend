@@ -5,25 +5,44 @@ from rest_framework import serializers
 from .models import Conversation, Message
 from drf_spectacular.utils import extend_schema_field
 
+ALLOWED_IMAGE_EXTENSIONS = ['jpeg', 'jpg', 'png', 'gif', 'webp']
+
+
 class Base64ImageField(serializers.ImageField):
     def to_internal_value(self, data):
-        if isinstance(data, str) and data.startswith('data:image'):
-            try:
-                format, imgstr = data.split(';base64,')
-                ext = format.split('/')[-1]
-                data = ContentFile(base64.b64decode(imgstr), name=f"{uuid.uuid4().hex}.{ext}")
-            except Exception:
-                raise serializers.ValidationError("Invalid base64 image data.")
+        if isinstance(data, str):
+            if data.startswith('data:image'):
+                try:
+                    format, imgstr = data.split(';base64,')
+                    ext = format.split('/')[-1].lower()
+                    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+                        raise serializers.ValidationError(
+                            f"Unsupported image format '{ext}'. "
+                            f"Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}."
+                        )
+                    data = ContentFile(
+                        base64.b64decode(imgstr),
+                        name=f"{uuid.uuid4().hex}.{ext}"
+                    )
+                except serializers.ValidationError:
+                    raise
+                except Exception:
+                    raise serializers.ValidationError("Invalid base64 image data.")
+            else:
+                raise serializers.ValidationError(
+                    "Expected a file upload or a base64 encoded image string."
+                )
         return super().to_internal_value(data)
+
 
 class MessageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
-        fields =['id', 'sender', 'text', 'image_url', 'status', 'created_at'] 
+        fields = ['id', 'sender', 'text', 'image_url', 'status', 'created_at']
         read_only_fields = ['id', 'created_at']
-    
+
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_image_url(self, obj):
         if obj.image:
@@ -37,11 +56,13 @@ class MessageSerializer(serializers.ModelSerializer):
             return f"{settings.SERVER_BASE_URL}{url}"
         return None
 
+
 class ConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Conversation
-        fields =['id', 'title', 'created_at', 'updated_at']
-        read_only_fields =['id', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
 
 class AudioTranscribeSerializer(serializers.Serializer):
     audio = serializers.FileField()
@@ -51,12 +72,13 @@ class AudioTranscribeSerializer(serializers.Serializer):
             raise serializers.ValidationError("Audio file too large. Max 10MB.")
         return value
 
+
 class ImageUploadSerializer(serializers.ModelSerializer):
     image = Base64ImageField()
 
     class Meta:
         model = Message
-        fields =['image']
+        fields = ['image']
 
     def validate_image(self, value):
         if value.size > 50 * 1024 * 1024:

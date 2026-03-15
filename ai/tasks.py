@@ -28,6 +28,7 @@ DANGEROUS_PATTERNS = [
     re.compile(r'disregard\s+(all|previous)\s+rules', re.IGNORECASE),
 ]
 
+
 def validate_input(text):
     if not text:
         return True
@@ -47,6 +48,21 @@ def send_ws_message(conversation_id, message_data):
             "message": message_data,
         },
     )
+
+
+def _fail_ai_message(ai_msg, conversation_id, text="System Error. AI is currently unavailable."):
+    """Helper to mark an AI message as failed and notify the client."""
+    ai_msg.status = "failed"
+    ai_msg.text = text
+    ai_msg.save(update_fields=["status", "text"])
+    send_ws_message(conversation_id, {
+        "id": ai_msg.id,
+        "text": ai_msg.text,
+        "sender": "ai",
+        "is_ai": True,
+        "status": "failed",
+        "created_at": str(ai_msg.created_at),
+    })
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=15)
@@ -94,7 +110,6 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             "created_at": str(ai_msg.created_at),
         })
 
-        # Generate title for new conversations
         if is_new_chat and user_text:
             try:
                 title_res = client.chat.completions.create(
@@ -114,7 +129,6 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             except Exception as e:
                 logger.warning("title_generation_failed", error=str(e))
 
-        # Build message history for context
         messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
 
         recent_msgs = list(
@@ -184,7 +198,6 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
         )
 
     except (RateLimitError, APITimeoutError, APIConnectionError) as e:
-        # Transient OpenAI error — retry with backoff
         logger.warning(
             "ai_transient_error_retrying",
             error=str(e),
@@ -192,21 +205,26 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             attempt=self.request.retries + 1,
             conversation_id=conversation_id,
         )
+
+        if self.request.retries >= self.max_retries:
+            if ai_msg:
+                _fail_ai_message(
+                    ai_msg,
+                    conversation_id,
+                    text="AI service is temporarily unavailable. Please try again."
+                )
+            return
+
         if ai_msg:
             ai_msg.status = "processing"
             ai_msg.save(update_fields=["status"])
+
         raise self.retry(exc=e, countdown=15 * (self.request.retries + 1))
 
     except SoftTimeLimitExceeded:
         logger.error("ai_task_soft_timeout", conversation_id=conversation_id)
         if ai_msg:
-            ai_msg.status = "failed"
-            ai_msg.text = "Request timed out. Please try again."
-            ai_msg.save(update_fields=["status", "text"])
-            send_ws_message(conversation_id, {
-                "id": ai_msg.id, "text": ai_msg.text, "sender": "ai",
-                "is_ai": True, "status": "failed", "created_at": str(ai_msg.created_at),
-            })
+            _fail_ai_message(ai_msg, conversation_id, text="Request timed out. Please try again.")
 
     except Exception as e:
         logger.error(
@@ -217,17 +235,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             exc_info=True,
         )
         if ai_msg:
-            ai_msg.status = "failed"
-            ai_msg.text = "System Error. AI is currently unavailable."
-            ai_msg.save(update_fields=["status", "text"])
-            send_ws_message(conversation_id, {
-                "id": ai_msg.id,
-                "text": ai_msg.text,
-                "sender": "ai",
-                "is_ai": True,
-                "status": "failed",
-                "created_at": str(ai_msg.created_at),
-            })
+            _fail_ai_message(ai_msg, conversation_id)
 
     finally:
         cache.delete(f"ai_processing_lock:{conversation_id}:{user_id}")

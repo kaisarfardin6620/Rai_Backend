@@ -3,6 +3,7 @@ from django.conf import settings
 from django.utils.crypto import get_random_string
 import uuid
 
+
 class Community(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
@@ -17,25 +18,25 @@ class Community(models.Model):
     class Meta:
         ordering = ['-updated_at']
 
+    def _generate_unique_invite_code(self):
+        for _ in range(10):
+            code = get_random_string(12)
+            if not Community.objects.filter(invite_code=code).exclude(pk=self.pk).exists():
+                return code
+        raise ValueError("Could not generate a unique invite code after 10 attempts.")
+
     def save(self, *args, **kwargs):
         if not self.invite_code:
-            while True:
-                code = get_random_string(12)
-                if not Community.objects.filter(invite_code=code).exists():
-                    self.invite_code = code
-                    break
+            self.invite_code = self._generate_unique_invite_code()
         super().save(*args, **kwargs)
 
     def rotate_invite_code(self):
-        while True:
-            code = get_random_string(12)
-            if not Community.objects.filter(invite_code=code).exists():
-                self.invite_code = code
-                break
-        self.save()
+        self.invite_code = self._generate_unique_invite_code()
+        self.save(update_fields=['invite_code'])
 
     def __str__(self):
         return self.name
+
 
 class Membership(models.Model):
     ROLE_CHOICES = (
@@ -54,6 +55,7 @@ class Membership(models.Model):
             models.Index(fields=['community', 'user']),
         ]
 
+
 class CommunityMessage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     community = models.ForeignKey(Community, on_delete=models.CASCADE, related_name="messages", db_index=True)
@@ -66,10 +68,11 @@ class CommunityMessage(models.Model):
     class Meta:
         ordering = ['created_at']
 
+
 class JoinRequest(models.Model):
     community = models.ForeignKey(Community, on_delete=models.CASCADE, related_name="join_requests")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         unique_together = ('community', 'user')

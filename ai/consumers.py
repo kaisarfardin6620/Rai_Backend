@@ -8,6 +8,8 @@ from .services import AIService
 
 logger = structlog.get_logger(__name__)
 
+MAX_MESSAGE_LENGTH = 50000
+
 
 class ChatConsumer(AsyncWebsocketConsumer):
 
@@ -75,19 +77,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if not message_text and not image_id:
                 return
 
+            if message_text and len(message_text) > MAX_MESSAGE_LENGTH:
+                await self.send_json({
+                    "type": "error",
+                    "code": "message_too_long",
+                    "message": f"Message too long. Maximum {MAX_MESSAGE_LENGTH} characters allowed.",
+                })
+                return
+
             if not self.conversation_id:
                 conversation = await self.create_new_conversation(self.user)
                 self.conversation_id = str(conversation.id)
                 self.room_group_name = f"chat_{self.conversation_id}"
                 await self.channel_layer.group_add(self.room_group_name, self.channel_name)
 
-                # Tell the client which conversation was created
                 await self.send_json({
                     "type": "conversation_created",
                     "conversation_id": self.conversation_id,
                 })
 
-            # Prevent double AI calls while one is in-flight
             lock_key = f"ai_processing_lock:{self.conversation_id}:{self.user.id}"
             has_processing = await self.check_processing_messages(self.conversation_id)
             if not has_processing:
@@ -101,7 +109,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 })
                 return
 
-            # Save the user message
+            is_new_chat = (await self.get_message_count(self.conversation_id)) == 0
+
             try:
                 msg = await self.save_message(self.conversation_id, message_text, "user", image_id)
             except Exception as e:
@@ -137,9 +146,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 },
             })
 
-            is_new_chat = (await self.get_message_count(self.conversation_id)) <= 1
-
-            # Dispatch Celery task — catch dispatch errors explicitly
             try:
                 generate_ai_response.delay(
                     str(self.conversation_id),
@@ -154,7 +160,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     conversation_id=self.conversation_id,
                 )
             except Exception as e:
-                # Celery is down or misconfigured — release lock and tell the client
                 logger.error("celery_dispatch_failed", error=str(e), exc_info=True)
                 await database_sync_to_async(cache.delete)(lock_key)
                 await self.send_json({
