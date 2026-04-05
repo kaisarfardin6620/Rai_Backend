@@ -102,13 +102,12 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
     is_muted = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
     pending_request_count = serializers.SerializerMethodField()
-    group_link = serializers.SerializerMethodField() 
 
     class Meta:
         model = Community
         fields = [
             'id', 'name', 'description', 'icon', 'is_private', 'approval_required',
-            'invite_code', 'invite_link', 'group_link', 'created_at', 'member_count', 
+            'invite_code', 'created_at', 'member_count', 
             'is_member', 'role', 'is_muted', 'pending_request_count'
         ]
 

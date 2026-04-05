@@ -117,14 +117,8 @@ class CommunityViewSet(viewsets.ModelViewSet):
         community = self.get_object()
         community.rotate_invite_code()
         return Response({
-<<<<<<< HEAD
             "message": "Invite code reset", 
             "invite_code": community.invite_code
-=======
-            "message": "Invite link reset",
-            "invite_code": community.invite_code,
-            "invite_link": serializer.data['invite_link']
->>>>>>> 1a12b7d5b50737385f672a7bb61f7e36c1b0ce62
         })
 
     @action(detail=True, methods=['get'])
