@@ -6,15 +6,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def get_client_ip(request):
     if not request:
         return None
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0].strip()
+        ip = x_forwarded_for.split(',')[-1].strip()
     else:
         ip = request.META.get('REMOTE_ADDR')
     return ip
+
 
 def send_email(subject, message, recipient_list, html_message=None, retries=3):
     for attempt in range(retries):
@@ -35,14 +37,15 @@ def send_email(subject, message, recipient_list, html_message=None, retries=3):
                 return False
     return False
 
-def api_response(message, data=None, success=True, status_code=status.HTTP_200_OK, request=None, extra=None):
+
+def api_response(message, data=None, success=True, status_code=status.HTTP_200_OK, extra=None):
     payload = {
         "success": success,
         "message": message,
         "data": data if data is not None else {}
     }
-    
+
     if extra:
         payload.update(extra)
-    
+
     return Response(payload, status=status_code)

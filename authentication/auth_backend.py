@@ -6,13 +6,14 @@ import logging
 User = get_user_model()
 logger = logging.getLogger("authentication")
 
+
 class MultiFieldAuthBackend(ModelBackend):
     def authenticate(self, request, username=None, password=None, **kwargs):
         if not username or not password:
             return None
-        
+
         username = username.lower().strip()
-        
+
         try:
             user = User.objects.get(
                 Q(username=username) |
@@ -27,9 +28,8 @@ class MultiFieldAuthBackend(ModelBackend):
 
         if user.check_password(password) and self.user_can_authenticate(user):
             return user
-        
+
         return None
-    
+
     def user_can_authenticate(self, user):
-        is_active = getattr(user, 'is_active', None)
-        return is_active or is_active is None
+        return getattr(user, 'is_active', False) is True

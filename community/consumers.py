@@ -7,6 +7,8 @@ from .models import Community, Membership, CommunityMessage
 
 logger = structlog.get_logger(__name__)
 
+MAX_MESSAGE_LENGTH = 5000
+
 
 class CommunityConsumer(AsyncWebsocketConsumer):
 
@@ -21,8 +23,8 @@ class CommunityConsumer(AsyncWebsocketConsumer):
         self.community_id = self.scope["url_route"]["kwargs"]["community_id"]
         self.room_group_name = f"community_{self.community_id}"
 
-        is_member = await self.check_membership(self.community_id, self.user)
-        if not is_member:
+        membership = await self.get_membership(self.community_id, self.user)
+        if not membership:
             logger.warning(
                 "community_ws_unauthorized",
                 user_id=self.user.id,
@@ -30,6 +32,8 @@ class CommunityConsumer(AsyncWebsocketConsumer):
             )
             await self.close(code=4003)
             return
+
+        self.is_muted = membership.is_muted
 
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
@@ -61,6 +65,25 @@ class CommunityConsumer(AsyncWebsocketConsumer):
         try:
             message_text = data.get("message", "").strip()
             if not message_text:
+                return
+
+            if len(message_text) > MAX_MESSAGE_LENGTH:
+                await self.send(text_data=json.dumps({
+                    "type": "error",
+                    "message": f"Message too long. Maximum {MAX_MESSAGE_LENGTH} characters allowed.",
+                }))
+                return
+
+            membership = await self.get_membership(self.community_id, self.user)
+            if not membership:
+                await self.send(text_data=json.dumps({"type": "error", "message": "You are no longer a member."}))
+                return
+
+            if membership.is_muted:
+                await self.send(text_data=json.dumps({
+                    "type": "error",
+                    "message": "You are muted in this community.",
+                }))
                 return
 
             saved_msg = await self.save_message(self.community_id, self.user, message_text)
@@ -96,8 +119,11 @@ class CommunityConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps(event))
 
     @database_sync_to_async
-    def check_membership(self, community_id, user):
-        return Membership.objects.filter(community_id=community_id, user=user).exists()
+    def get_membership(self, community_id, user):
+        try:
+            return Membership.objects.get(community_id=community_id, user=user)
+        except Membership.DoesNotExist:
+            return None
 
     @database_sync_to_async
     def save_message(self, community_id, user, text):
@@ -115,13 +141,11 @@ class CommunityConsumer(AsyncWebsocketConsumer):
                 return url
             return f"{base_url}{url}"
 
-        # Fetch last 50 chronologically — use ascending order so no reversed() is needed
         messages = list(
             CommunityMessage.objects.filter(community_id=community_id)
             .select_related("sender")
             .order_by("-created_at")[:50]
         )
-        # list() evaluates the queryset, now it's safe to reverse without a TypeError
         messages.reverse()
 
         return [

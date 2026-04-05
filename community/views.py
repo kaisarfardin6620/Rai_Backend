@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.pagination import PageNumberPagination
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from channels.layers import get_channel_layer
@@ -19,13 +20,15 @@ from .permissions import IsCommunityAdmin
 
 logger = structlog.get_logger(__name__)
 
+
 class StandardPagination(PageNumberPagination):
     page_size = 30
     max_page_size = 100
 
+
 class CommunityViewSet(viewsets.ModelViewSet):
     queryset = Community.objects.all()
-    
+
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     pagination_class = StandardPagination
 
@@ -97,16 +100,16 @@ class CommunityViewSet(viewsets.ModelViewSet):
         code = request.data.get('invite_code')
         if not code:
             return Response({"detail": "Invite code required"}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         community, msg, code_status = CommunityService.join_by_code(request.user, code)
-        
+
         if community:
             return Response({
-                "message": msg, 
-                "community_id": community.id, 
+                "message": msg,
+                "community_id": str(community.id),
                 "name": community.name
             }, status=code_status)
-            
+
         return Response({"detail": msg}, status=code_status)
 
     @action(detail=True, methods=['post'], url_path='reset_invite_link')
@@ -114,8 +117,14 @@ class CommunityViewSet(viewsets.ModelViewSet):
         community = self.get_object()
         community.rotate_invite_code()
         return Response({
+<<<<<<< HEAD
             "message": "Invite code reset", 
             "invite_code": community.invite_code
+=======
+            "message": "Invite link reset",
+            "invite_code": community.invite_code,
+            "invite_link": serializer.data['invite_link']
+>>>>>>> 1a12b7d5b50737385f672a7bb61f7e36c1b0ce62
         })
 
     @action(detail=True, methods=['get'])
@@ -123,7 +132,7 @@ class CommunityViewSet(viewsets.ModelViewSet):
         community = get_object_or_404(Community, pk=pk)
         if not Membership.objects.filter(community=community, user=request.user).exists():
             return Response({"detail": "Not a member"}, status=status.HTTP_403_FORBIDDEN)
-        
+
         msgs = CommunityMessage.objects.filter(community=community).select_related('sender').order_by('-created_at')
         page = self.paginate_queryset(msgs)
         serializer = CommunityMessageSerializer(page, many=True, context={'request': request})
@@ -135,9 +144,9 @@ class CommunityViewSet(viewsets.ModelViewSet):
             community = Community.objects.get(pk=pk)
         except Community.DoesNotExist:
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
-        
+
         if Membership.objects.filter(community=community, user=request.user).exists():
-             return Response({"detail": "Already a member"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Already a member"}, status=status.HTTP_400_BAD_REQUEST)
 
         if community.is_private:
             _, created = JoinRequest.objects.get_or_create(community=community, user=request.user)
@@ -152,18 +161,22 @@ class CommunityViewSet(viewsets.ModelViewSet):
     def leave(self, request, pk=None):
         community = self.get_object()
         try:
-            membership = Membership.objects.get(community=community, user=request.user)
-            is_admin = membership.role == 'admin'
-            membership.delete()
-            
-            if community.memberships.count() == 0:
-                community.delete()
-            elif is_admin and not community.memberships.filter(role='admin').exists():
-                oldest_member = community.memberships.order_by('joined_at').first()
-                if oldest_member:
-                    oldest_member.role = 'admin'
-                    oldest_member.save(update_fields=['role'])
-                    
+            with transaction.atomic():
+                membership = Membership.objects.select_for_update().get(
+                    community=community, user=request.user
+                )
+                is_admin = membership.role == 'admin'
+                membership.delete()
+
+                remaining = community.memberships.count()
+                if remaining == 0:
+                    community.delete()
+                elif is_admin and not community.memberships.filter(role='admin').exists():
+                    oldest_member = community.memberships.order_by('joined_at').first()
+                    if oldest_member:
+                        oldest_member.role = 'admin'
+                        oldest_member.save(update_fields=['role'])
+
             return Response({"message": "Left community"})
         except Membership.DoesNotExist:
             return Response({"detail": "Not a member"}, status=status.HTTP_400_BAD_REQUEST)
@@ -183,11 +196,13 @@ class CommunityViewSet(viewsets.ModelViewSet):
     def members(self, request, pk=None):
         community = self.get_object()
         search = request.query_params.get('search', '').strip()
-        
+
         memberships = Membership.objects.filter(community=community).select_related('user')
         if search:
-            memberships = memberships.filter(Q(user__username__icontains=search) | Q(user__first_name__icontains=search))
-        
+            memberships = memberships.filter(
+                Q(user__username__icontains=search) | Q(user__first_name__icontains=search)
+            )
+
         memberships = memberships.order_by('role', 'user__username')
         page = self.paginate_queryset(memberships)
         serializer = MembershipSerializer(page, many=True, context={'request': request})
@@ -210,7 +225,7 @@ class CommunityViewSet(viewsets.ModelViewSet):
     def change_role(self, request, pk=None):
         community = self.get_object()
         serializer = ChangeMemberRoleSerializer(data=request.data)
-        
+
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -218,16 +233,16 @@ class CommunityViewSet(viewsets.ModelViewSet):
         new_role = serializer.validated_data['role']
 
         if target_user_id == request.user.id:
-             return Response({"detail": "You cannot change your own role here"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "You cannot change your own role here"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             target_membership = Membership.objects.get(community=community, user_id=target_user_id)
             target_membership.role = new_role
             target_membership.save()
-            
+
             action_text = "promoted to Admin" if new_role == 'admin' else "demoted to Member"
             return Response({"message": f"User {action_text}"})
-            
+
         except Membership.DoesNotExist:
             return Response({"detail": "User is not a member"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -235,18 +250,18 @@ class CommunityViewSet(viewsets.ModelViewSet):
     def upload_media(self, request, pk=None):
         community = get_object_or_404(Community, pk=pk)
         if not Membership.objects.filter(community=community, user=request.user).exists():
-             return Response({"detail": "Not a member"}, status=status.HTTP_403_FORBIDDEN)
-        
+            return Response({"detail": "Not a member"}, status=status.HTTP_403_FORBIDDEN)
+
         image = request.FILES.get('image')
         audio = request.FILES.get('audio')
-        
+
         if not image and not audio:
-             return Response({"detail": "No media provided"}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response({"detail": "No media provided"}, status=status.HTTP_400_BAD_REQUEST)
+
         msg = CommunityService.create_message(community, request.user, image=image, audio=audio)
         image_url = request.build_absolute_uri(msg.image.url) if msg.image else None
         audio_url = request.build_absolute_uri(msg.audio.url) if msg.audio else None
-        
+
         profile_pic_url = None
         if request.user.profile_picture:
             profile_pic_url = request.build_absolute_uri(request.user.profile_picture.url)
@@ -270,8 +285,8 @@ class CommunityViewSet(viewsets.ModelViewSet):
                 'created_at': str(msg.created_at)
             }
         )
-        
+
         return Response({
-            "message": "Media uploaded", 
+            "message": "Media uploaded",
             "data": {"image_url": image_url, "audio_url": audio_url, "message_id": str(msg.id)}
         })
