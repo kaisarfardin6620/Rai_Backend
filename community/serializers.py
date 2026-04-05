@@ -76,15 +76,13 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     is_muted = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
-    invite_link = serializers.SerializerMethodField()
     pending_request_count = serializers.SerializerMethodField()
-    group_link = serializers.SerializerMethodField() 
 
     class Meta:
         model = Community
         fields =[
             'id', 'name', 'description', 'icon', 'is_private', 'approval_required',
-            'invite_code', 'invite_link', 'group_link', 'created_at', 'member_count', 
+            'invite_code', 'created_at', 'member_count', 
             'is_member', 'role', 'is_muted', 'pending_request_count'
         ]
 
@@ -121,16 +119,7 @@ class CommunityDetailSerializer(serializers.ModelSerializer):
         except Membership.DoesNotExist:
             return False
 
-    @extend_schema_field(serializers.CharField)
-    def get_invite_link(self, obj):
-        request = self.context.get('request')
-        if request:
-            return f"{request.scheme}://{request.get_host()}/join/{obj.invite_code}"
-        return f"/join/{obj.invite_code}"
 
-    @extend_schema_field(serializers.CharField)
-    def get_group_link(self, obj):
-        return f"https://rai.app-group-picks-odds/{obj.invite_code}"
 
     @extend_schema_field(serializers.IntegerField)
     def get_pending_request_count(self, obj):

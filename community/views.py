@@ -35,9 +35,9 @@ class CommunityViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
-        return Community.objects.filter(
-            memberships__user=self.request.user
-        ).annotate(member_count=Count('memberships')).order_by('-updated_at')
+        return Community.objects.annotate(
+            member_count=Count('memberships')
+        ).order_by('-updated_at')
 
     def get_serializer_class(self):
         if self.action == 'list': return CommunityListSerializer
@@ -113,11 +113,9 @@ class CommunityViewSet(viewsets.ModelViewSet):
     def reset_invite_link(self, request, pk=None):
         community = self.get_object()
         community.rotate_invite_code()
-        serializer = CommunityDetailSerializer(community, context={'request': request})
         return Response({
-            "message": "Invite link reset", 
-            "invite_code": community.invite_code, 
-            "invite_link": serializer.data['invite_link']
+            "message": "Invite code reset", 
+            "invite_code": community.invite_code
         })
 
     @action(detail=True, methods=['get'])
