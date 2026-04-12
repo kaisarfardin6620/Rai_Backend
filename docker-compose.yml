@@ -60,6 +60,22 @@ services:
       - redis
       - web
     command: celery -A Rai_Backend worker --pool=prefork --concurrency=4 -Q celery -n worker_general@%h --loglevel=info
+
+  celery_beat:
+    build: .
+    container_name: rai_celery_beat
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RUNNING_IN_DOCKER: "true"
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - web
+    command: celery -A Rai_Backend beat --loglevel=info
     
   redis:
     image: redis:7-alpine

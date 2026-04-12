@@ -12,9 +12,11 @@ try:
 except Exception:
     pass
 
-dotenv.load_dotenv()
+import dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+dotenv.load_dotenv(BASE_DIR / ".env")
+
 LOGS_DIR = BASE_DIR / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 

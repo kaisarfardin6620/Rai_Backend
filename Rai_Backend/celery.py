@@ -2,6 +2,7 @@ import os
 from celery import Celery
 from celery.signals import task_failure
 import logging
+from celery.schedules import crontab
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Rai_Backend.settings')
 
@@ -18,3 +19,10 @@ def log_task_failure(sender=None, task_id=None, exception=None, **kwargs):
 @app.task(bind=True, ignore_result=True)
 def debug_task(self):
     logger.info(f'Request: {self.request!r}')
+
+app.conf.beat_schedule = {
+    'sync-odds-every-5-minutes': {
+        'task': 'betting.tasks.sync_odds_data',
+        'schedule': crontab(minute='*/5'),
+    },
+}    
