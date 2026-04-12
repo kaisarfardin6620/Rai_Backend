@@ -101,7 +101,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if not has_processing:
                 await database_sync_to_async(cache.delete)(lock_key)
 
-            if not await self.acquire_lock(lock_key, 35):
+            if not await self.acquire_lock(lock_key, 240):
                 await self.send_json({
                     "type": "error",
                     "code": "ai_busy",

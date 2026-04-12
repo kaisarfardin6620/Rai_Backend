@@ -161,11 +161,19 @@ class CommunityMessageSerializer(serializers.ModelSerializer):
     sender = UserShortSerializer(read_only=True)
     image = serializers.SerializerMethodField()
     audio = serializers.SerializerMethodField()
+    isme = serializers.SerializerMethodField()
 
     class Meta:
         model = CommunityMessage
-        fields = ['id', 'community', 'sender', 'text', 'image', 'audio', 'created_at']
-        read_only_fields = ['id', 'created_at', 'sender', 'image', 'audio']
+        fields = ['id', 'community', 'sender', 'text', 'image', 'audio', 'created_at', 'isme']
+        read_only_fields = ['id', 'created_at', 'sender', 'image', 'audio', 'isme']
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_isme(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            return obj.sender_id == request.user.id
+        return False
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_image(self, obj):

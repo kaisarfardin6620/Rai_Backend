@@ -168,8 +168,13 @@ CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", 300))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", 240))
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_PREFETCH_MULTIPLIER", 1))
+CELERY_BROKER_POOL_LIMIT = int(os.getenv("CELERY_BROKER_POOL_LIMIT", 10))
 CELERY_TASK_ROUTES = {
-    "ai.tasks.generate_ai_response": {"queue": "ai_queue"},
+    "ai.tasks.generate_ai_response": {"queue": "default"},
+    "*": {"queue": "default"},
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -228,22 +233,22 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.ScopedRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "200/minute",
-        "otp": "5/minute",
-        "login": "10/minute",
-        "media": "2000/hour",
-        "conversation": "100/hour",
-        "user": "1000/day",
+        "anon": os.getenv("THROTTLE_ANON", "200/minute"),
+        "otp": os.getenv("THROTTLE_OTP", "5/minute"),
+        "login": os.getenv("THROTTLE_LOGIN", "10/minute"),
+        "media": os.getenv("THROTTLE_MEDIA", "2000/hour"),
+        "conversation": os.getenv("THROTTLE_CONVERSATION", "100/hour"),
+        "user": os.getenv("THROTTLE_USER", "1000/day"),
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "authentication.exceptions.custom_exception_handler",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 20,
+    "PAGE_SIZE": int(os.getenv("PAGE_SIZE", 20)),
 }
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=int(os.getenv('JWT_ACCESS_HOURS', 1))),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_DAYS', 70))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_DAYS', 7))),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
