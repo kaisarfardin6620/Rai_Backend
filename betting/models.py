@@ -79,11 +79,13 @@ class UserParlay(models.Model):
     risk_level = models.CharField(max_length=20, default="Medium")
     total_odds = models.IntegerField(default=0)
     overall_confidence = models.IntegerField(default=0)
+    is_tracked = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         indexes = [
             models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'is_tracked']),
         ]
 
     def save(self, *args, **kwargs):
@@ -92,4 +94,23 @@ class UserParlay(models.Model):
 
     def delete(self, *args, **kwargs):
         cache.delete(f'user_parlays_{self.user_id}')
+        super().delete(*args, **kwargs)
+
+class SavedPick(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_picks")
+    pick = models.ForeignKey(Pick, on_delete=models.CASCADE, related_name="saved_by")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        unique_together = ('user', 'pick')
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+        ]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        cache.delete(f'user_saved_picks_{self.user_id}')
+
+    def delete(self, *args, **kwargs):
+        cache.delete(f'user_saved_picks_{self.user_id}')
         super().delete(*args, **kwargs)

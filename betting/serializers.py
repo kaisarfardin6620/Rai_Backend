@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Pick, Match, UserParlay
+from .models import Pick, Match, UserParlay, SavedPick
 
 class PickSerializer(serializers.ModelSerializer):
     home_team = serializers.CharField(source='match.home_team')
@@ -16,5 +16,12 @@ class ParlaySerializer(serializers.ModelSerializer):
     picks = PickSerializer(many=True, read_only=True)
 
     class Meta:
-        model = UserParlay
-        fields =['id', 'risk_level', 'total_odds', 'overall_confidence', 'picks', 'created_at']
+        fields =['id', 'risk_level', 'total_odds', 'overall_confidence', 'picks', 'created_at', 'is_tracked']
+
+class SavedPickSerializer(serializers.ModelSerializer):
+    pick = PickSerializer(read_only=True)
+
+    class Meta:
+        model = SavedPick
+        fields = ['id', 'user', 'pick', 'created_at']
+        read_only_fields = ['id', 'user', 'created_at']

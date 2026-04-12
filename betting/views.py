@@ -44,3 +44,36 @@ class BettingViewSet(viewsets.ViewSet):
         parlays = UserParlay.objects.filter(user=request.user).prefetch_related('picks__match')
         serializer = ParlaySerializer(parlays, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def stored_picks(self, request):
+        picks = Pick.objects.filter(saved_by__user=request.user).select_related('match__sport')
+        return Response(PickSerializer(picks, many=True).data)
+
+    @action(detail=True, methods=['post'])
+    def toggle_save(self, request, pk=None):
+        try:
+            pick = Pick.objects.get(pk=pk)
+            from .models import SavedPick
+            sp, created = SavedPick.objects.get_or_create(user=request.user, pick=pick)
+            if not created:
+                sp.delete()
+                return Response({"status": "removed"})
+            return Response({"status": "saved"})
+        except Pick.DoesNotExist:
+            return Response({"error": "Pick not found"}, status=404)
+
+    @action(detail=True, methods=['post'])
+    def send_to_tracking(self, request, pk=None):
+        try:
+            parlay = UserParlay.objects.get(pk=pk, user=request.user)
+            parlay.is_tracked = True
+            parlay.save(update_fields=['is_tracked'])
+            return Response({"status": "sent_to_tracking"})
+        except UserParlay.DoesNotExist:
+            return Response({"error": "Parlay not found"}, status=404)
+
+    @action(detail=False, methods=['get'])
+    def live_tracking(self, request):
+        parlays = UserParlay.objects.filter(user=request.user, is_tracked=True).prefetch_related('picks__match')
+        return Response(ParlaySerializer(parlays, many=True).data)
