@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils.crypto import get_random_string
+from django.core.cache import cache
 import uuid
 
 
@@ -29,6 +30,13 @@ class Community(models.Model):
         if not self.invite_code:
             self.invite_code = self._generate_unique_invite_code()
         super().save(*args, **kwargs)
+        cache.delete('all_communities')
+        cache.delete(f'community_{self.id}')
+
+    def delete(self, *args, **kwargs):
+        cache.delete('all_communities')
+        cache.delete(f'community_{self.id}')
+        super().delete(*args, **kwargs)
 
     def rotate_invite_code(self):
         self.invite_code = self._generate_unique_invite_code()
@@ -53,7 +61,18 @@ class Membership(models.Model):
         unique_together = ('community', 'user')
         indexes = [
             models.Index(fields=['community', 'user']),
+            models.Index(fields=['user', 'role']),
         ]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        cache.delete(f'_membership_{self.community_id}_{self.user_id}')
+        cache.delete(f'user_memberships_{self.user_id}')
+
+    def delete(self, *args, **kwargs):
+        cache.delete(f'_membership_{self.community_id}_{self.user_id}')
+        cache.delete(f'user_memberships_{self.user_id}')
+        super().delete(*args, **kwargs)
 
 
 class CommunityMessage(models.Model):
@@ -67,6 +86,17 @@ class CommunityMessage(models.Model):
 
     class Meta:
         ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['community', '-created_at']),
+        ]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        cache.delete(f'community_messages_{self.community_id}')
+
+    def delete(self, *args, **kwargs):
+        cache.delete(f'community_messages_{self.community_id}')
+        super().delete(*args, **kwargs)
 
 
 class JoinRequest(models.Model):

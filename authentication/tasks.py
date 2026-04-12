@@ -6,10 +6,6 @@ logger = logging.getLogger(__name__)
 
 @shared_task(bind=True)
 def flush_expired_tokens_task(self):
-    """
-    Periodic task to clear out expired outstanding and blacklisted tokens
-    from the rest_framework_simplejwt.token_blacklist tables.
-    """
     try:
         call_command("flushexpiredtokens")
         logger.info("Successfully flushed expired SimpleJWT tokens.")

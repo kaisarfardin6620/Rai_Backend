@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.core.validators import MaxLengthValidator
+from django.core.cache import cache
 import uuid
 
 class Conversation(models.Model):
@@ -20,6 +21,16 @@ class Conversation(models.Model):
             models.Index(fields=['user', 'is_active']),
             models.Index(fields=['user', 'is_active', '-updated_at']),
         ]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        cache.delete(f'user_conversations_{self.user_id}')
+        cache.delete(f'conversation_{self.id}')
+
+    def delete(self, *args, **kwargs):
+        cache.delete(f'user_conversations_{self.user_id}')
+        cache.delete(f'conversation_{self.id}')
+        super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"{self.user.username} - {self.title}"
@@ -46,6 +57,11 @@ class Message(models.Model):
         if not self.token_count and self.text:
             self.token_count = len(self.text) // 4
         super().save(*args, **kwargs)
+        cache.delete(f'conversation_messages_{self.conversation_id}')
+
+    def delete(self, *args, **kwargs):
+        cache.delete(f'conversation_messages_{self.conversation_id}')
+        super().delete(*args, **kwargs)
 
     class Meta:
         ordering = ['created_at']

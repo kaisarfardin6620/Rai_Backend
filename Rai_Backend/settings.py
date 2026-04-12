@@ -6,6 +6,7 @@ import dotenv
 import dj_database_url
 import structlog
 import django.http.multipartparser
+from celery.schedules import crontab
 
 try:
     django.http.multipartparser.MAX_TOTAL_HEADER_SIZE = 52428800
@@ -15,7 +16,7 @@ except Exception:
 import dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-dotenv.load_dotenv(BASE_DIR / ".env")
+dotenv.load_dotenv(BASE_DIR / ".env", encoding="utf-8-sig")
 
 LOGS_DIR = BASE_DIR / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
@@ -176,6 +177,13 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = os.getenv("CELERY_BROKER_CONNECTION_
 CELERY_TASK_ROUTES = {
     "ai.tasks.generate_ai_response": {"queue": "default"},
     "*": {"queue": "default"},
+}
+
+CELERY_BEAT_SCHEDULE = {
+    "flush-expired-tokens-nightly": {
+        "task": "authentication.tasks.flush_expired_tokens_task",
+        "schedule": crontab(hour=0, minute=0),
+    },
 }
 
 AUTH_PASSWORD_VALIDATORS = [
