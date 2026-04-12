@@ -18,6 +18,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 LOGS_DIR = BASE_DIR / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
+THE_ODDS_API_KEY = os.getenv("THE_ODDS_API_KEY")
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 if not SECRET_KEY:
@@ -67,6 +69,7 @@ INSTALLED_APPS = [
     "ai",
     "community",
     "support",
+    "betting",
 ]
 
 MIDDLEWARE = [

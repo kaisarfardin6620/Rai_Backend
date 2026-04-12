@@ -37,6 +37,7 @@ urlpatterns = [
     path('api/support/', include('support.urls')),
     path('api/dashboard/', include('dashboard.urls')),
     path('api/health/', health_check, name='health-check'),
+    path('api/betting/', include('betting.urls')),
 ]
 
 if settings.DEBUG:
