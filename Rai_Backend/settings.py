@@ -184,6 +184,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "authentication.tasks.flush_expired_tokens_task",
         "schedule": crontab(hour=0, minute=0),
     },
+    "cleanup-expired-otps-hourly": {
+        "task": "authentication.tasks.cleanup_expired_otps_task",
+        "schedule": crontab(minute=0),
+    },
 }
 
 AUTH_PASSWORD_VALIDATORS = [

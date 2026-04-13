@@ -13,3 +13,14 @@ def flush_expired_tokens_task(self):
     except Exception as e:
         logger.error(f"Error flushing expired tokens: {e}")
         return str(e)
+
+@shared_task
+def cleanup_expired_otps_task():
+    try:
+        from authentication.models import OTP
+        OTP.cleanup_expired()
+        logger.info("Successfully cleaned up expired OTPs.")
+        return "OTPs Cleaned"
+    except Exception as e:
+        logger.error(f"Error cleaning expired OTPs: {e}")
+        return str(e)
