@@ -13,8 +13,6 @@ try:
 except Exception:
     pass
 
-import dotenv
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 dotenv.load_dotenv(BASE_DIR / ".env", encoding="utf-8-sig")
 
@@ -32,24 +30,27 @@ if not SECRET_KEY:
         raise ValueError("SECRET_KEY environment variable is required!")
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+RUNNING_IN_DOCKER = os.getenv("RUNNING_IN_DOCKER", "false") == "true"
 
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+ALLOWED_HOSTS =[h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+
+if RUNNING_IN_DOCKER:
+    ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "web"])
 
 SERVER_BASE_URL = os.getenv("SERVER_BASE_URL", "http://localhost:8000")
 
 if not DEBUG and not ALLOWED_HOSTS:
     raise ValueError("ALLOWED_HOSTS must be set in production!")
 
-RUNNING_IN_DOCKER = os.getenv("RUNNING_IN_DOCKER", "false") == "true"
 
 AUTH_USER_MODEL = "authentication.User"
 
-AUTHENTICATION_BACKENDS = [
+AUTHENTICATION_BACKENDS =[
     "authentication.auth_backend.MultiFieldAuthBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 
-INSTALLED_APPS = [
+INSTALLED_APPS =[
     "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -75,7 +76,7 @@ INSTALLED_APPS = [
     "betting",
 ]
 
-MIDDLEWARE = [
+MIDDLEWARE =[
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -91,12 +92,12 @@ ROOT_URLCONF = "Rai_Backend.urls"
 WSGI_APPLICATION = "Rai_Backend.wsgi.application"
 ASGI_APPLICATION = "Rai_Backend.asgi.application"
 
-TEMPLATES = [
+TEMPLATES =[
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "APP_DIRS": True,
         "OPTIONS": {
-            "context_processors": [
+            "context_processors":[
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
@@ -118,9 +119,10 @@ if DATABASE_URL:
     DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
     DATABASES["default"].setdefault("OPTIONS", {})
     DATABASES["default"]["OPTIONS"]["connect_timeout"] = 10
+    DATABASES["default"]["OPTIONS"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 else:
     if not DEBUG:
-        raise ValueError("DATABASE_URL (or DATABASE_BASE_URL) environment variable must be set in production!")
+        raise ValueError("DATABASE_URL environment variable must be set in production!")
 
     db_path = BASE_DIR / ("dbs/db.sqlite3" if RUNNING_IN_DOCKER else "db.sqlite3")
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,10 +139,15 @@ REDIS_URL = os.getenv(
     "redis://redis:6379/0" if RUNNING_IN_DOCKER else "redis://127.0.0.1:6379/0",
 )
 
+CACHE_REDIS_URL = os.getenv(
+    "CACHE_REDIS_URL",
+    "redis://redis:6379/1" if RUNNING_IN_DOCKER else "redis://127.0.0.1:6379/1",
+)
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL,
+        "LOCATION": CACHE_REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "IGNORE_EXCEPTIONS": False,
@@ -154,7 +161,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [REDIS_URL],
+            "hosts":[CACHE_REDIS_URL],
             "expiry": int(os.getenv("CHANNEL_EXPIRY", 900)),
         },
     }
@@ -175,7 +182,7 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_PREFETCH_MULTIPLIER", 
 CELERY_BROKER_POOL_LIMIT = int(os.getenv("CELERY_BROKER_POOL_LIMIT", 10))
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = os.getenv("CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP", "True").lower() == "true"
 CELERY_TASK_ROUTES = {
-    "ai.tasks.generate_ai_response": {"queue": "default"},
+    "ai.tasks.generate_ai_response": {"queue": "heavy_queue"},
     "*": {"queue": "default"},
 }
 
@@ -184,9 +191,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "authentication.tasks.flush_expired_tokens_task",
         "schedule": crontab(hour=0, minute=0),
     },
+    "sync-odds-every-5-minutes": {
+        "task": "betting.tasks.sync_odds_data",
+        "schedule": crontab(minute='*/5'),
+    },
 }
 
-AUTH_PASSWORD_VALIDATORS = [
+AUTH_PASSWORD_VALIDATORS =[
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
@@ -208,7 +219,7 @@ if not DEBUG:
 
 CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "False").lower() == "true"
 if not CORS_ALLOW_ALL_ORIGINS:
-    CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+    CORS_ALLOWED_ORIGINS =[o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
     if not CORS_ALLOWED_ORIGINS and not DEBUG:
         import warnings
         warnings.warn(
@@ -217,7 +228,7 @@ if not CORS_ALLOW_ALL_ORIGINS:
             stacklevel=2
         )
 
-CSRF_TRUSTED_ORIGINS = [
+CSRF_TRUSTED_ORIGINS =[
     o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
@@ -226,19 +237,19 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
+    "DEFAULT_AUTHENTICATION_CLASSES":[
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    "DEFAULT_RENDERER_CLASSES": [
+    "DEFAULT_RENDERER_CLASSES":[
         "authentication.renderers.CustomJSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
-    "DEFAULT_PARSER_CLASSES": [
+    "DEFAULT_PARSER_CLASSES":[
         "rest_framework.parsers.JSONParser",
         "rest_framework.parsers.MultiPartParser",
         "rest_framework.parsers.FormParser",
     ],
-    "DEFAULT_THROTTLE_CLASSES": [
+    "DEFAULT_THROTTLE_CLASSES":[
         "rest_framework.throttling.ScopedRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
@@ -306,7 +317,7 @@ else:
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-_shared_processors = [
+_shared_processors =[
     structlog.stdlib.add_log_level,
     structlog.stdlib.add_logger_name,
     structlog.processors.TimeStamper(fmt="iso"),
@@ -375,16 +386,15 @@ LOGGING = {
             "propagate": False,
         },
         "authentication": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
-        "ai": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
+        "ai": {"handlers":["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
         "community": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
         "support": {"handlers": ["console", "file"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False},
-        "celery": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
+        "celery": {"handlers":["console", "file"], "level": "INFO", "propagate": False},
     },
 }
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
-
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
