@@ -34,13 +34,14 @@ services:
     environment:
       RUNNING_IN_DOCKER: "true"
       REDIS_URL: redis://redis:6379/0
+      CACHE_REDIS_URL: redis://redis:6379/1
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
       RUN_MIGRATIONS: "false"
     volumes:
       - ./media:/app/media
       - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request, sys; r=urllib.request.urlopen('http://localhost:8000/api/health/'); sys.exit(0 if r.status == 200 else 1)"]
+      test:  ["CMD", "python", "-c", "import urllib.request, sys; r=urllib.request.urlopen('http://localhost:8000/api/health/'); sys.exit(0 if r.status == 200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -62,6 +63,7 @@ services:
       RUNNING_IN_DOCKER: "true"
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
+      CACHE_REDIS_URL: redis://redis:6379/1
     volumes:
       - ./media:/app/media
       - ./logs:/app/logs
@@ -92,6 +94,7 @@ services:
     environment:
       RUNNING_IN_DOCKER: "true"
       REDIS_URL: redis://redis:6379/0
+      CACHE_REDIS_URL: redis://redis:6379/1
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
     volumes:
       - ./media:/app/media
@@ -124,6 +127,7 @@ services:
     environment:
       RUNNING_IN_DOCKER: "true"
       REDIS_URL: redis://redis:6379/0
+      CACHE_REDIS_URL: redis://redis:6379/1
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
     volumes:
       - ./media:/app/media
@@ -155,6 +159,7 @@ services:
     environment:
       RUNNING_IN_DOCKER: "true"
       REDIS_URL: redis://redis:6379/0
+      CACHE_REDIS_URL: redis://redis:6379/1
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
     volumes:
       - ./logs:/app/logs

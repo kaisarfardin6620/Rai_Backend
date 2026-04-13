@@ -24,6 +24,8 @@ RUN mkdir -p /app/logs /app/staticfiles /app/media \
     && chown -R appuser:appgroup /app \
     && chmod +x /app/entrypoint.sh
 
+RUN SECRET_KEY="dummy_key_for_build" python manage.py collectstatic --noinput --clear
+
 USER appuser
 
 EXPOSE 8000

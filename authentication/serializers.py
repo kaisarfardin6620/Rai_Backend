@@ -21,7 +21,6 @@ class Base64ImageField(serializers.ImageField):
     def to_internal_value(self, data):
         if isinstance(data, str):
             if data.startswith('data:image'):
-                # FIX: Validate extension and handle malformed base64 clearly
                 try:
                     format, imgstr = data.split(';base64,')
                     ext = format.split('/')[-1].lower()
@@ -38,9 +37,6 @@ class Base64ImageField(serializers.ImageField):
                 except Exception:
                     raise serializers.ValidationError("Invalid base64 image data.")
             else:
-                # FIX: Reject plain strings that are not base64 images — previously
-                # these fell through silently to the parent ImageField with a
-                # confusing error message.
                 raise serializers.ValidationError(
                     "Expected a file upload or a base64 encoded image string."
                 )
@@ -217,9 +213,6 @@ class ProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['username', 'email', 'phone']
 
     def update(self, instance, validated_data):
-        # FIX: Explicitly handle profile_picture so it is never silently skipped.
-        # Without this, ModelSerializer's default update() can miss file fields
-        # that come through request.FILES rather than request.data.
         profile_picture = validated_data.pop('profile_picture', None)
         if profile_picture is not None:
             instance.profile_picture = profile_picture
@@ -357,7 +350,6 @@ class LogoutSerializer(serializers.Serializer):
         except Exception:
             pass
 
-
 class DeleteAccountSerializer(serializers.Serializer):
     password = serializers.CharField()
 
@@ -372,8 +364,9 @@ class DeleteAccountSerializer(serializers.Serializer):
         suffix = f"_deleted_{uuid.uuid4().hex[:8]}"
         user.is_active = False
         user.username = f"{user.username}{suffix}"[:150]
+        
         if user.email:
-            user.email = f"{user.email}{suffix}"
+            user.email = f"{user.email}{suffix}"[:200]
         if user.phone:
             user.phone = f"{user.phone}{suffix}"[:20]
         user.save(update_fields=['is_active', 'username', 'email', 'phone'])
