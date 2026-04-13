@@ -119,7 +119,7 @@ if DATABASE_URL:
     DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
     DATABASES["default"].setdefault("OPTIONS", {})
     DATABASES["default"]["OPTIONS"]["connect_timeout"] = 10
-    DATABASES["default"]["OPTIONS"]["DISABLE_SERVER_SIDE_CURSORS"] = True
+    DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 else:
     if not DEBUG:
         raise ValueError("DATABASE_URL environment variable must be set in production!")
