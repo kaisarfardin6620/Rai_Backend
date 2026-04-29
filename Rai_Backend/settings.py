@@ -69,7 +69,6 @@ INSTALLED_APPS =[
     "storages",
     "authentication",
     "dashboard",
-    "subscription",
     "ai",
     "community",
     "support",
@@ -417,15 +416,7 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp-api.infobip.com")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
-EMAIL_HOST_USER = os.getenv("SMTP_USERNAME", "")
-EMAIL_HOST_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
-EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() == "true"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@rai.app")
-
 INFOBIP_BASE_URL = os.getenv("INFOBIP_BASE_URL")
 INFOBIP_API_KEY = os.getenv("INFOBIP_API_KEY")
 INFOBIP_SENDER_ID = os.getenv("INFOBIP_SENDER_ID")
