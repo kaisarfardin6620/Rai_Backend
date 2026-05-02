@@ -1,6 +1,7 @@
 import structlog
 import base64
 import re
+import tiktoken
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
@@ -22,7 +23,7 @@ CRITICAL SECURITY INSTRUCTIONS:
 6. Be helpful, polite, and concise.
 """
 
-DANGEROUS_PATTERNS = [
+DANGEROUS_PATTERNS =[
     re.compile(r'ignore\s+(previous|all|prior|your)\s+instructions', re.IGNORECASE),
     re.compile(r'system:\s*you\s+are', re.IGNORECASE),
     re.compile(r'disregard\s+(all|previous)\s+rules', re.IGNORECASE),
@@ -129,7 +130,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
             except Exception as e:
                 logger.warning("title_generation_failed", error=str(e))
 
-        messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages_payload =[{"role": "system", "content": SYSTEM_PROMPT}]
 
         recent_msgs = list(
             Message.objects.filter(conversation_id=conversation_id)
@@ -138,10 +139,10 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
         )
         recent_msgs.reverse()
 
-        hist_list = []
+        hist_list =[]
         for msg in recent_msgs:
             role = "assistant" if msg.sender == "ai" else "user"
-            content = []
+            content =[]
             if msg.text:
                 content.append({"type": "text", "text": msg.text})
 
@@ -150,7 +151,7 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
                     with msg.image.open("rb") as img_file:
                         encoded_string = base64.b64encode(img_file.read()).decode("utf-8")
                     ext = msg.image.name.split(".")[-1].lower() if "." in msg.image.name else "jpeg"
-                    mime_type = f"image/{ext}" if ext in ["jpeg", "png", "webp", "gif"] else "image/jpeg"
+                    mime_type = f"image/{ext}" if ext in["jpeg", "png", "webp", "gif"] else "image/jpeg"
                     content.append({
                         "type": "image_url",
                         "image_url": {"url": f"data:{mime_type};base64,{encoded_string}"},
@@ -166,7 +167,34 @@ def generate_ai_response(self, conversation_id, user_text, user_id, is_new_chat=
 
         messages_payload.extend(hist_list)
 
-        logger.debug("ai_request_payload", message_count=len(messages_payload), conversation_id=conversation_id)
+        MAX_CONTEXT_TOKENS = 120000
+        current_tokens = 0
+        try:
+            encoding = tiktoken.get_encoding("cl100k_base")
+            for m in messages_payload:
+                if isinstance(m["content"], str):
+                    current_tokens += len(encoding.encode(m["content"]))
+                elif isinstance(m["content"], list):
+                    for part in m["content"]:
+                        if part.get("type") == "text":
+                            current_tokens += len(encoding.encode(part["text"]))
+                        elif part.get("type") == "image_url":
+                            current_tokens += 85
+        except Exception as e:
+            logger.warning("tiktoken_encoding_failed", error=str(e))
+
+        if current_tokens > MAX_CONTEXT_TOKENS:
+            logger.warning("token_budget_exceeded", tokens=current_tokens, conversation_id=conversation_id)
+            if ai_msg:
+                _fail_ai_message(
+                    ai_msg,
+                    conversation_id,
+                    text="Conversation history is too long. Please start a new chat."
+                )
+            cache.delete(f"ai_processing_lock:{conversation_id}:{user_id}")
+            return
+
+        logger.debug("ai_request_payload", message_count=len(messages_payload), current_tokens=current_tokens, conversation_id=conversation_id)
 
         response = client.chat.completions.create(
             model=settings.OPENAI_MODEL,

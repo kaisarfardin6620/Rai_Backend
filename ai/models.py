@@ -3,6 +3,7 @@ from django.conf import settings
 from django.core.validators import MaxLengthValidator
 from django.core.cache import cache
 import uuid
+import tiktoken
 
 class Conversation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -55,7 +56,12 @@ class Message(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.token_count and self.text:
-            self.token_count = len(self.text) // 4
+            try:
+                encoding = tiktoken.get_encoding("cl100k_base")
+                self.token_count = len(encoding.encode(self.text))
+            except Exception:
+                self.token_count = len(self.text) // 4
+                
         super().save(*args, **kwargs)
         cache.delete(f'conversation_messages_{self.conversation_id}')
 
@@ -65,7 +71,7 @@ class Message(models.Model):
 
     class Meta:
         ordering = ['created_at']
-        indexes = [
+        indexes =[
             models.Index(fields=['conversation', '-created_at']),
             models.Index(fields=['conversation', 'sender', '-created_at']),
             models.Index(fields=['conversation', 'token_count']),

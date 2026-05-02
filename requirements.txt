@@ -8,7 +8,6 @@ django-redis
 redis==5.0.1
 openai==2.1.0
 google-auth==2.42.0
-google-genai==1.46.0
 dj-database-url==3.0.1
 pillow
 celery==5.4.0
@@ -31,7 +30,6 @@ django-cleanup==8.1.0
 structlog==24.1.0
 drf-spectacular==0.27.1
 gevent==23.9.1
-structlog
 requests
 PyJWT
 cryptography
